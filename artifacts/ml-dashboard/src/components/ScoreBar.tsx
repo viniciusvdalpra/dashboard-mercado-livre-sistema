@@ -1,27 +1,28 @@
-import React from "react";
 import { cn } from "@/lib/utils";
 
 interface ScoreBarProps {
-  score: number;
+  value: number;
+  showLabel?: boolean;
   className?: string;
 }
 
-export function ScoreBar({ score, className }: ScoreBarProps) {
-  let colorClass = "bg-destructive";
-  if (score >= 80) colorClass = "bg-[#539616]";
-  else if (score >= 60) colorClass = "bg-[#C6A339]";
+export function ScoreBar({ value, showLabel = false, className }: ScoreBarProps) {
+  const pct = Math.min(100, Math.max(0, value));
+  const color = pct >= 80 ? "#539616" : pct >= 60 ? "#C6A339" : "#A60808";
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+    <div className={cn("flex items-center gap-2 flex-1", className)}>
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all", colorClass)}
-          style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: color }}
         />
       </div>
-      <span className={cn("text-xs font-bold", colorClass.replace("bg-", "text-").replace("[", "").replace("]", ""))}>
-        {score}
-      </span>
+      {showLabel && (
+        <span className="text-xs font-semibold w-6 text-right" style={{ color }}>
+          {value}
+        </span>
+      )}
     </div>
   );
 }
