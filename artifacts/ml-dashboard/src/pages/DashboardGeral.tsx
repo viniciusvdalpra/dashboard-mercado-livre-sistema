@@ -379,7 +379,7 @@ export default function DashboardGeral() {
           <SalesChart data={DAILY_SALES} />
         </div>
         <div
-          className="bg-white rounded-2xl p-5 border border-border flex flex-col h-full min-h-0"
+          className="bg-white rounded-2xl p-5 border border-border flex flex-col h-full min-h-0 overflow-hidden"
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
         >
           <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
@@ -387,10 +387,10 @@ export default function DashboardGeral() {
             {PROBLEMS.map((p, i) => (
               <div
                 key={i}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm ${SEVERITY_STYLES[p.severity]}`}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${SEVERITY_STYLES[p.severity]}`}
               >
-                <span className="font-medium text-xs">{p.label}</span>
-                <span className="font-bold text-base">{p.count}</span>
+                <span className="font-medium text-[13px]">{p.label}</span>
+                <span className="font-bold text-[15px]">{p.count}</span>
               </div>
             ))}
           </div>
