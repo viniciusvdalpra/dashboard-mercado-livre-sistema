@@ -1,19 +1,17 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { KpiCard } from "@/components/KpiCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   ACCOUNTS, DASHBOARD_KPIS, PROBLEMS, DAILY_SALES,
 } from "@/mock/data";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   ShoppingCart, DollarSign, Star, AlertTriangle,
-  Car, FileText, Truck, Package, Plus, Download,
-  TrendingUp, TrendingDown, ArrowUpRight,
+  Car, FileText, Truck, Package, Download,
+  ArrowUpRight,
 } from "lucide-react";
 
 function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
@@ -96,7 +94,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-            {[7, 30].map(p => (
+            {[7, 30, 60, 90].map(p => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
@@ -128,7 +126,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" interval={period === 7 ? 0 : 4} />
+          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" interval={period === 7 ? 0 : period <= 30 ? 4 : 9} />
           <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent"
             tickFormatter={v => mode === "revenue" ? `R$${(v / 1000).toFixed(0)}k` : String(v)}
           />
@@ -167,11 +165,6 @@ export default function DashboardGeral() {
           <p className="text-xs text-muted-foreground mt-0.5">Consolidado das 4 contas Mercado Livre</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 h-9 px-4 text-sm font-semibold text-white rounded-xl transition-all"
-            style={{ background: "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 34%))", boxShadow: "0 4px 14px hsl(174 72% 36% / .3)" }}
-          >
-            <Plus className="h-4 w-4" /> Nova venda
-          </button>
           <button className="flex items-center gap-2 h-9 px-4 text-sm font-semibold text-foreground bg-white rounded-xl border border-border hover:bg-muted transition-colors">
             <Download className="h-4 w-4" /> Exportar
           </button>
