@@ -376,8 +376,8 @@ export default function DashboardGeral() {
       </div>
 
       {/* ── Chart + Problems ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6" style={{ height: 500 }}>
-        <div className="xl:col-span-2 h-full">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 mb-6" style={{ height: 400 }}>
+        <div className="xl:col-span-3 h-full">
           <SalesChart data={DAILY_SALES} />
         </div>
         <div
