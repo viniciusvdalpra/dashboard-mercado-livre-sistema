@@ -1,0 +1,2057 @@
+# BLUEPRINT DEFINITIVO — Sistema de Gestão Automatizada Mercado Livre
+## 4 Contas | 15.000 Anúncios | VPS + Python | Claude Code
+
+**Versão:** 4.1 Revisada
+**Baseado em:** Documentação oficial da API ML + 5 planilhas Ecommerce Puro + Pesquisa de mercado
+**Segmento:** Autopeças para veículos de linha leve (carros e picapes)
+**Regime tributário:** Lucro Real
+**Curva ABC:** 120 dias (confirmado)
+**Notificações:** Slack (canal dedicado)
+
+---
+
+# ÍNDICE
+
+1. [Setup Inicial (Fase 0)](#fase-0)
+2. [Arquitetura e Estrutura do Projeto](#arquitetura)
+3. [Banco de Dados](#banco-de-dados)
+4. [Mapa Completo de Endpoints da API](#endpoints)
+5. [Módulos — Especificação Técnica](#modulos)
+6. [Lógicas de Negócio Extraídas das Planilhas](#logicas)
+7. [Sistema de Diagnóstico Diário](#diagnostico)
+8. [Relatório e Notificações](#relatorio)
+9. [Cron Jobs e Automação](#cron)
+10. [Sprints de Implementação](#sprints)
+11. [Prompts para Claude Code](#prompts)
+12. [Métricas de Sucesso](#metricas)
+
+---
+
+# 1. SETUP INICIAL (FASE 0) <a name="fase-0"></a>
+
+## 1.1 Registrar Aplicação no ML Developers
+
+1. Acessar: https://developers.mercadolivre.com.br/
+2. Criar aplicação com scopes: `read`, `write`, `offline_access`
+3. Redirect URI: `https://seudominio.com/callback`
+4. Tópicos de notificação: `items`, `orders_v2`, `shipments`, `items_prices`, `catalog_item_competition_status`
+5. Anotar: `APP_ID` e `SECRET_KEY`
+
+**Uma aplicação para as 4 contas.** Cada conta gera seu próprio par de tokens.
+
+## 1.2 Gerar Tokens OAuth para as 4 Contas
+
+Para cada conta ML, logado nela:
+
+```
+# Passo 1: Abrir no navegador
+https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=$APP_ID&redirect_uri=$REDIRECT_URI
+
+# Passo 2: Trocar code por tokens
+POST https://api.mercadolibre.com/oauth/token
+{
+  "grant_type": "authorization_code",
+  "client_id": $APP_ID,
+  "client_secret": $SECRET_KEY,
+  "code": "TG-XXXXXXXX",
+  "redirect_uri": $REDIRECT_URI
+}
+
+# Resposta:
+{
+  "access_token": "APP_USR-xxxxx",    // expira em 6h
+  "refresh_token": "TG-xxxxx",         // válido 6 meses, uso único
+  "user_id": 123456789
+}
+```
+
+## 1.3 VPS
+
+- Ubuntu 22.04+, 2 vCPU, 4GB RAM, 40GB SSD
+- Python 3.11+, PostgreSQL 15+, Nginx, Redis (para filas)
+
+---
+
+# 2. ARQUITETURA <a name="arquitetura"></a>
+
+```
+ml-diagnostico/
+├── .env                              # Tokens (NUNCA commitar)
+├── .env.example
+├── requirements.txt
+├── docker-compose.yml                # PostgreSQL + Redis + app
+├── alembic.ini                       # Migrações do banco
+│
+├── config/
+│   ├── settings.py                   # Carrega .env (pydantic-settings)
+│   ├── accounts.py                   # Modelo das 4 contas ML
+│   ├── thresholds.py                 # Limiares do semáforo (editável)
+│   └── tags_weight.py                # Peso das tags (▲ ▼ -) baseado na análise do Ecommerce Puro
+│
+├── core/
+│   ├── auth.py                       # OAuth2: refresh automático de tokens
+│   ├── api_client.py                 # HTTP async + rate limiting + retry
+│   ├── database.py                   # SQLAlchemy async + models
+│   └── queue.py                      # Redis queue para jobs pesados
+│
+├── collectors/
+│   ├── account_health.py             # Reputação da conta (GET /users/$USER_ID)
+│   ├── item_search.py                # Lista itens ativos, paginação
+│   ├── item_performance.py           # Score 0-100 (GET /item/$ITEM_ID/performance)
+│   ├── item_health_gauge.py          # Unhealthy/warning/healthy
+│   ├── purchase_experience.py        # Experiência de compra por item
+│   ├── technical_specs.py            # Ficha técnica completa por categoria (INCLUI HIDDEN)
+│   ├── catalog_quality.py            # Atributos incompletos por seller
+│   ├── catalog_forewarning.py        # Itens pendentes de catálogo
+│   ├── missing_identifiers.py        # Itens sem GTIN/EAN
+│   ├── tags_collector.py             # Tags de anúncio e vendedor
+│   ├── prices.py                     # Preços + promoções ativas
+│   ├── price_monitor.py              # Sugestões de preço ML (concorrentes internos/externos) + tag not_market_price
+│   ├── compatibilities.py            # Compatibilidades de veículos (CRITICAL para autopeças)
+│   ├── ads_metrics.py                # Product Ads: ROAS, CTR, impressões
+│   ├── orders.py                     # Pedidos, vendas, mediações
+│   ├── dispatch_monitor.py           # Tempo de despacho: pedidos pendentes de envio
+│   ├── returns.py                    # Devoluções por item (taxa + motivos)
+│   ├── promotions.py                 # Convites de promoções ML pendentes (DEAL, ofertas)
+│   ├── infractions.py                # Infrações ativas: detalhes, vencimento, como resolver
+│   ├── stock.py                      # Estoque (Full, Flex, seller)
+│   ├── shipping.py                   # Custo de frete, mudanças de frete
+│   ├── reviews.py                    # Avaliações (1-5 estrelas)
+│   └── visits.py                     # Visitas e conversão (D-30/60/90/120)
+│
+├── analyzers/
+│   ├── semaphore.py                  # Gera status 🟢🟡🔴 por conta e item
+│   ├── trends.py                     # Detecta tendências (subindo/descendo)
+│   ├── abc_curve.py                  # Curva ABC por faturamento e repasse
+│   ├── tags_analyzer.py              # Analisa tags ▲▼- e impacto na conta
+│   ├── specs_gap.py                  # Gap de ficha técnica (preenchido vs. pendente)
+│   ├── freight_analyzer.py           # Identifica fretes desvantajosos
+│   ├── price_health.py               # Detecta not_market_price e competitividade
+│   ├── action_generator.py           # Gera plano de ação priorizado
+│   └── scoring.py                    # Score geral do anúncio (consolidado)
+│
+├── reporters/
+│   ├── daily_report.py               # Template do relatório diário
+│   ├── slack_sender.py               # Envio via Slack Webhook (canal dedicado)
+│   ├── email_sender.py               # SMTP (relatório semanal)
+│   └── correction_report.py          # Relatório de correções aplicadas (Sprint 8)
+│
+├── webhooks/
+│   ├── server.py                     # FastAPI para receber notificações ML
+│   └── handlers.py                   # Processa cada tipo de evento
+│
+├── integrations/
+│   ├── anymarket_client.py           # Cliente HTTP para API ANYMARKET v2
+│   ├── anymarket_products.py         # CRUD produtos + características
+│   ├── anymarket_skus.py             # CRUD SKUs + preço + EAN
+│   └── anymarket_sync.py             # Orquestra envio de correções
+│
+├── correctors/
+│   ├── specs_corrector.py            # Preenche ficha técnica (Rota ANY + Rota ML direto)
+│   ├── title_optimizer.py            # Otimiza títulos
+│   ├── price_adjuster.py             # Ajusta preços (com limites de segurança)
+│   ├── ean_filler.py                 # Preenche GTIN/EAN faltantes
+│   ├── compat_filler.py              # Preenche compatibilidades de veículos (em lote)
+│   └── correction_queue.py           # Fila: auto / aprovação / sugestão
+│
+├── api/
+│   ├── server.py                     # FastAPI — backend do dashboard
+│   ├── routes.py                     # Endpoints da API interna
+│   └── approval_routes.py            # Endpoints pra aprovar/rejeitar correções (Sprint 8)
+│
+├── frontend/                          # React + Vite + Tailwind (Sprint 7)
+│   ├── src/
+│   │   ├── pages/                    # T1 a T7 + página detalhe do item
+│   │   ├── components/               # Cards, tabelas, filtros, gráficos
+│   │   └── api/                      # Chamadas ao backend FastAPI
+│   ├── package.json
+│   └── vite.config.js
+│
+├── scripts/
+│   ├── setup_db.py                   # Cria tabelas
+│   ├── authorize_account.py          # Helper OAuth
+│   ├── initial_scan.py               # Primeira varredura completa
+│   ├── token_refresh.py              # Refresh automático de tokens (cron 5h)
+│   ├── run_collectors_heavy.py       # Coleta pesada (performance de todos os itens)
+│   ├── run_diagnostic.py             # Diagnóstico diário (orquestrador)
+│   ├── run_account_health.py         # Coleta saúde das contas
+│   ├── run_dispatch_monitor.py       # Verifica pedidos pendentes de despacho
+│   ├── run_ads_metrics.py            # Coleta métricas de Ads
+│   ├── run_specs_audit.py            # Auditoria de ficha técnica
+│   ├── run_freight_check.py          # Verificação de fretes
+│   ├── run_price_monitor.py          # Monitoramento de preço (sugestões ML)
+│   ├── run_compat_check.py           # Verifica compatibilidades pendentes (autopeças)
+│   ├── refresh_category_cache.py     # Atualiza cache de atributos por categoria
+│   └── send_report.py               # Gera e envia relatório
+│
+├── data/
+│   ├── tags_database.json            # 89 tags com peso e significado (extraído da planilha EP)
+│   ├── icms_table.json               # Tabela ICMS 27x27 estados (referência — não usado nos sprints 1-8)
+│   └── category_cache/              # Cache de atributos por categoria
+│
+└── tests/
+    ├── test_api_client.py
+    ├── test_collectors.py
+    ├── test_analyzers.py
+    └── test_report.py
+```
+
+## Arquivo .env
+
+```env
+# App ML
+ML_APP_ID=
+ML_SECRET_KEY=
+ML_REDIRECT_URI=https://seudominio.com/callback
+
+# Conta 1
+ACCOUNT_1_NAME=Conta Toyo (01)
+ACCOUNT_1_USER_ID=
+ACCOUNT_1_ACCESS_TOKEN=
+ACCOUNT_1_REFRESH_TOKEN=
+
+# Conta 2
+ACCOUNT_2_NAME=Conta SAC (02)
+ACCOUNT_2_USER_ID=
+ACCOUNT_2_ACCESS_TOKEN=
+ACCOUNT_2_REFRESH_TOKEN=
+
+# Conta 3
+ACCOUNT_3_NAME=Conta Oficial (03)
+ACCOUNT_3_USER_ID=
+ACCOUNT_3_ACCESS_TOKEN=
+ACCOUNT_3_REFRESH_TOKEN=
+
+# Conta 4
+ACCOUNT_4_NAME=Conta Denzel (04)
+ACCOUNT_4_USER_ID=
+ACCOUNT_4_ACCESS_TOKEN=
+ACCOUNT_4_REFRESH_TOKEN=
+
+# Database
+DB_URL=postgresql+asyncpg://ml_user:password@localhost:5432/ml_diagnostico
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# ANYMARKET
+ANYMARKET_TOKEN=
+ANYMARKET_BASE_URL=https://api.anymarket.com.br
+# Limites de segurança para correção automática de preço
+ANYMARKET_PRICE_ADJUST_MAX_PERCENT=10
+ANYMARKET_PRICE_ADJUST_MIN_MARGIN=15
+
+# Notificações
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
+SLACK_CHANNEL=#ml-diagnostico
+
+# Claude API (sugestões de preenchimento de ficha técnica)
+ANTHROPIC_API_KEY=sk-ant-...
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+REPORT_EMAIL_TO=
+
+# Dashboard (autenticação)
+DASHBOARD_USER=admin
+DASHBOARD_PASSWORD=
+DASHBOARD_JWT_SECRET=
+```
+
+## requirements.txt
+
+```
+# HTTP async
+httpx>=0.27.0
+tenacity>=8.2.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+alembic>=1.13.0
+
+# Web server
+fastapi>=0.110.0
+uvicorn>=0.27.0
+python-multipart>=0.0.9
+PyJWT>=2.8.0
+
+# Queue
+redis>=5.0.0
+arq>=0.26.0
+
+# Config
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+
+# Templates e relatórios
+jinja2>=3.1.0
+
+# CLI e output
+rich>=13.7.0
+click>=8.1.0
+loguru>=0.7.0
+
+# Utils
+python-dateutil>=2.8.0
+pytz>=2024.1
+orjson>=3.9.0
+
+# Testes
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# IA (sugestões de preenchimento de ficha técnica)
+anthropic>=0.40.0
+```
+
+---
+
+# 3. BANCO DE DADOS <a name="banco-de-dados"></a>
+
+```sql
+-- ==========================================
+-- CONTAS
+-- ==========================================
+CREATE TABLE accounts (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- SNAPSHOT DIÁRIO DA REPUTAÇÃO DA CONTA
+-- ==========================================
+CREATE TABLE account_health (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER REFERENCES accounts(id),
+    snapshot_date DATE NOT NULL,
+    -- Termômetro
+    level_id VARCHAR(20),                -- '5_green', '4_light_green', '3_yellow', '2_orange', '1_red'
+    power_seller_status VARCHAR(20),     -- 'platinum', 'gold', 'silver', null
+    -- Métricas (60 dias)
+    sales_completed INTEGER,
+    claims_rate DECIMAL(6,4),
+    claims_value INTEGER,
+    cancellations_rate DECIMAL(6,4),
+    cancellations_value INTEGER,
+    delayed_rate DECIMAL(6,4),
+    delayed_value INTEGER,
+    -- Dados reais se protegido
+    real_level VARCHAR(20),
+    real_claims_rate DECIMAL(6,4),
+    real_cancellations_rate DECIMAL(6,4),
+    real_delayed_rate DECIMAL(6,4),
+    -- Transações históricas
+    total_transactions INTEGER,
+    completed_transactions INTEGER,
+    canceled_transactions INTEGER,
+    positive_ratings DECIMAL(4,2),
+    negative_ratings DECIMAL(4,2),
+    neutral_ratings DECIMAL(4,2),
+    -- Tags do vendedor
+    seller_tags JSONB,
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(account_id, snapshot_date)
+);
+
+-- ==========================================
+-- ITENS (tabela principal)
+-- ==========================================
+CREATE TABLE items (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER REFERENCES accounts(id),
+    item_id VARCHAR(20) UNIQUE NOT NULL,     -- 'MLB1234567'
+    user_product_id VARCHAR(30),              -- 'MLBU...'
+    title VARCHAR(500),
+    sku VARCHAR(100),                          -- Vem de seller_custom_field OU atributo SELLER_SKU
+    category_id VARCHAR(20),
+    category_path VARCHAR(500),
+    domain_id VARCHAR(100),
+    price DECIMAL(12,2),
+    base_price DECIMAL(12,2),
+    original_price DECIMAL(12,2),
+    currency VARCHAR(5),
+    available_quantity INTEGER,
+    sold_quantity INTEGER,
+    initial_quantity INTEGER,
+    condition VARCHAR(20),
+    listing_type VARCHAR(30),                 -- 'gold_special', 'gold_pro', etc.
+    status VARCHAR(20),                       -- 'active', 'paused', 'closed'
+    sub_status VARCHAR(50),
+    permalink TEXT,
+    thumbnail TEXT,
+    video_id VARCHAR(50),
+    -- Envio
+    shipping_mode VARCHAR(20),
+    logistic_type VARCHAR(30),                -- 'fulfillment', 'xd_drop_off', 'cross_docking'
+    free_shipping BOOLEAN,
+    shipping_tags JSONB,
+    -- Catálogo
+    catalog_product_id VARCHAR(30),
+    catalog_listing BOOLEAN,
+    -- Canais
+    channels JSONB,                           -- ['marketplace', 'mshops']
+    -- Tags do anúncio
+    tags JSONB,
+    -- Custos
+    freight_cost DECIMAL(10,2),                -- Vem de GET /orders (shipping_cost), NÃO do GET /items
+    commission_rate DECIMAL(6,4),
+    commission_value DECIMAL(10,2),
+    fixed_fee DECIMAL(10,2),
+    -- Datas
+    date_created TIMESTAMPTZ,
+    last_updated TIMESTAMPTZ,
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- SCORE DE QUALIDADE POR ITEM (histórico)
+-- ==========================================
+CREATE TABLE item_performance (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    snapshot_date DATE NOT NULL,
+    -- Score /item/$ITEM_ID/performance
+    score INTEGER,                            -- 0 a 100
+    level VARCHAR(20),                        -- 'Basic', 'Standard', 'Professional'
+    -- Buckets detalhados
+    buckets JSONB,                            -- Lista completa de buckets/variables/rules
+    pending_actions JSONB,                    -- Ações pendentes simplificadas
+    -- Score /items/$ITEM_ID/health (legado)
+    health DECIMAL(4,2),
+    health_actions JSONB,
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, snapshot_date)
+);
+
+-- ==========================================
+-- EXPERIÊNCIA DE COMPRA POR ITEM
+-- ==========================================
+CREATE TABLE item_experience (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    snapshot_date DATE NOT NULL,
+    -- Reputação do item
+    health_gauge VARCHAR(20),                 -- 'healthy', 'warning', 'unhealthy'
+    reputation_color VARCHAR(20),
+    reputation_value INTEGER,                 -- 0 a 100
+    -- Problemas detalhados
+    problems JSONB,
+    total_problems INTEGER,
+    main_problem_key VARCHAR(50),
+    -- Vendas nos últimos 180 dias
+    sales_180d INTEGER,
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, snapshot_date)
+);
+
+-- ==========================================
+-- FICHA TÉCNICA (gap de atributos)
+-- ==========================================
+CREATE TABLE item_specs (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    snapshot_date DATE NOT NULL,
+    category_id VARCHAR(20),
+    -- Contadores
+    total_fields INTEGER,
+    filled_fields INTEGER,
+    empty_fields INTEGER,
+    -- Por tipo
+    required_total INTEGER,
+    required_filled INTEGER,
+    required_empty INTEGER,
+    hidden_total INTEGER,
+    hidden_filled INTEGER,
+    hidden_empty INTEGER,
+    common_total INTEGER,
+    common_filled INTEGER,
+    common_empty INTEGER,
+    relevant_total INTEGER,
+    relevant_filled INTEGER,
+    relevant_empty INTEGER,
+    -- Score calculado (igual planilha EP)
+    score_max DECIMAL(8,2),
+    score_actual DECIMAL(8,2),
+    score_percent DECIMAL(5,2),
+    -- Detalhes
+    missing_attributes JSONB,                 -- Lista de atributos faltantes com tipo e relevância
+    -- Compatibilidades de veículos (AUTOPEÇAS)
+    compat_status VARCHAR(30),                -- 'complete', 'incomplete', 'pending_suggestions', 'universal', null
+    compat_total INTEGER,                     -- Total de veículos compatíveis cadastrados
+    compat_pending_tags JSONB,                -- Tags: incomplete_compatibilities, pending_compatibilities, etc.
+    compat_suggestions_count INTEGER,         -- Quantas sugestões do ML disponíveis
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, snapshot_date)
+);
+
+-- ==========================================
+-- VENDAS E CONVERSÃO (D-30/60/90/120)
+-- ==========================================
+CREATE TABLE item_sales (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    snapshot_date DATE NOT NULL,
+    -- Visitas
+    total_visits INTEGER,
+    -- Vendas por período
+    sales_d30 INTEGER,
+    sales_d60 INTEGER,
+    sales_d90 INTEGER,
+    sales_d120 INTEGER,
+    -- Faturamento por período
+    revenue_d30 DECIMAL(12,2),
+    revenue_d60 DECIMAL(12,2),
+    revenue_d90 DECIMAL(12,2),
+    revenue_d120 DECIMAL(12,2),
+    -- Conversão
+    conversion_rate DECIMAL(6,4),
+    -- Cancelamentos e devoluções
+    cancel_rate DECIMAL(6,4),
+    return_rate DECIMAL(6,4),                  -- Devoluções / vendas totais do item
+    -- Avaliações
+    total_reviews INTEGER,
+    avg_rating DECIMAL(3,2),
+    rating_1 INTEGER,
+    rating_2 INTEGER,
+    rating_3 INTEGER,
+    rating_4 INTEGER,
+    rating_5 INTEGER,
+    -- Curva ABC
+    abc_revenue VARCHAR(1),                   -- 'A', 'B', 'C'
+    abc_profit VARCHAR(1),
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, snapshot_date)
+);
+
+-- ==========================================
+-- MÉTRICAS DE ADS
+-- ==========================================
+CREATE TABLE ads_metrics (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER REFERENCES accounts(id),
+    item_id VARCHAR(20),
+    campaign_id VARCHAR(30),
+    metric_date DATE NOT NULL,
+    impressions INTEGER,
+    clicks INTEGER,
+    ctr DECIMAL(6,4),
+    cost DECIMAL(12,2),
+    cpc DECIMAL(8,2),
+    direct_units INTEGER,
+    direct_amount DECIMAL(12,2),
+    organic_units INTEGER,
+    organic_amount DECIMAL(12,2),
+    roas DECIMAL(8,2),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(account_id, item_id, campaign_id, metric_date)
+);
+
+-- ==========================================
+-- ALERTAS
+-- ==========================================
+CREATE TABLE alerts (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER REFERENCES accounts(id),
+    item_id VARCHAR(20),
+    alert_type VARCHAR(50),
+    -- Tipos: 'reputation_risk', 'unhealthy_item', 'catalog_forewarning',
+    -- 'missing_pi', 'stock_rupture', 'negative_tag', 'not_market_price',
+    -- 'spec_gap', 'conversion_drop', 'sales_drop', 'ads_roas_low',
+    -- 'freight_disadvantage', 'moderation_penalty', 'price_above_suggestion',
+    -- 'compat_incomplete', 'compat_pending', 'compat_position_missing'
+    severity VARCHAR(10),                     -- 'red', 'yellow', 'info'
+    title VARCHAR(200),
+    message TEXT,
+    action_required TEXT,
+    data JSONB,                               -- Dados extras do alerta
+    resolved BOOLEAN DEFAULT FALSE,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- COMPETIÇÃO DE PREÇO (SUGESTÕES ML)
+-- ==========================================
+CREATE TABLE price_competition (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    snapshot_date DATE NOT NULL,
+    -- Preços
+    current_price DECIMAL(12,2),
+    suggested_price DECIMAL(12,2),              -- Preço sugerido pelo ML
+    price_gap DECIMAL(12,2),                    -- current_price - suggested_price
+    price_gap_percent DECIMAL(6,2),             -- % acima do sugerido
+    -- Status da sugestão
+    suggestion_status VARCHAR(30),              -- 'no_benchmark_ok', 'no_benchmark_lowest', etc.
+    suggestion_type VARCHAR(30),                -- 'competition' (concorrência) ou 'unhealthy' (campanha)
+    -- Tag not_market_price
+    has_not_market_price BOOLEAN DEFAULT FALSE, -- Se ML está penalizando
+    -- Automatização
+    has_price_automation BOOLEAN DEFAULT FALSE, -- Se tem automatização ativa
+    automation_rule VARCHAR(20),                 -- 'INT_EXT', 'INT', null
+    automation_min DECIMAL(12,2),
+    automation_max DECIMAL(12,2),
+    -- Buy Box (apenas ~1% catálogo)
+    catalog_product_id VARCHAR(30),
+    buybox_status VARCHAR(30),                   -- 'winning', 'competing', null (se não catálogo)
+    price_to_win DECIMAL(12,2),                  -- Só pra catálogo
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, snapshot_date)
+);
+
+-- ==========================================
+-- HISTÓRICO DE MUDANÇAS DE FRETE
+-- ==========================================
+CREATE TABLE freight_changes (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    change_date TIMESTAMPTZ DEFAULT NOW(),
+    old_cost DECIMAL(10,2),
+    new_cost DECIMAL(10,2),
+    change_percent DECIMAL(6,2),
+    free_shipping BOOLEAN,
+    auto_removed BOOLEAN DEFAULT FALSE        -- Se foi removido automaticamente
+);
+
+-- ==========================================
+-- VENDAS DIÁRIAS POR ITEM (gráfico de tendência)
+-- Retenção: manter últimos 180 dias, agregar mais antigo por semana
+-- Estimativa: ~15.000 itens x 180 dias = ~2.7M linhas (gerenciável no PostgreSQL)
+-- ==========================================
+CREATE TABLE item_daily_sales (
+    id SERIAL PRIMARY KEY,
+    item_id VARCHAR(20) NOT NULL,
+    sale_date DATE NOT NULL,
+    quantity INTEGER DEFAULT 0,
+    revenue DECIMAL(12,2) DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(item_id, sale_date)
+);
+
+CREATE INDEX idx_daily_sales_item ON item_daily_sales(item_id, sale_date DESC);
+
+-- ==========================================
+-- FILA DE CORREÇÕES
+-- ==========================================
+CREATE TABLE corrections (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER REFERENCES accounts(id),
+    item_id VARCHAR(20) NOT NULL,
+    -- Tipo de correção
+    correction_type VARCHAR(50),              -- 'specs_fill', 'specs_hidden', 'title_optimize',
+                                              -- 'price_adjust', 'ean_fill', 'compat_fill'
+    -- Modo de execução
+    execution_mode VARCHAR(20),               -- 'auto', 'approval', 'suggestion'
+    -- Rota de envio
+    route VARCHAR(20),                        -- 'anymarket', 'ml_direct'
+    -- Dados da correção
+    field_name VARCHAR(100),                  -- Nome do campo/atributo
+    old_value TEXT,
+    new_value TEXT,
+    correction_data JSONB,                    -- Dados completos da correção
+    -- Impacto estimado
+    estimated_score_gain DECIMAL(5,2),        -- Quantos pontos ganha
+    -- Status
+    status VARCHAR(20) DEFAULT 'pending',     -- 'pending', 'approved', 'rejected', 'executed', 'verified', 'failed'
+    approved_by VARCHAR(100),
+    approved_at TIMESTAMPTZ,
+    executed_at TIMESTAMPTZ,
+    verified_at TIMESTAMPTZ,                  -- Confirmou no ML que corrigiu
+    error_message TEXT,
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_corrections_status ON corrections(status, execution_mode, created_at DESC);
+CREATE INDEX idx_corrections_item ON corrections(item_id, status);
+
+-- ==========================================
+-- CACHE DE ATRIBUTOS POR CATEGORIA
+-- ==========================================
+CREATE TABLE category_attributes_cache (
+    id SERIAL PRIMARY KEY,
+    category_id VARCHAR(20) UNIQUE NOT NULL,
+    domain_id VARCHAR(100),
+    attributes JSONB,                         -- Resposta completa do /categories/.../technical_specs/input
+    total_attributes INTEGER,
+    required_count INTEGER,
+    hidden_count INTEGER,
+    common_count INTEGER,
+    cached_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- ÍNDICES
+-- ==========================================
+CREATE INDEX idx_account_health_date ON account_health(account_id, snapshot_date DESC);
+CREATE INDEX idx_items_account_status ON items(account_id, status);
+CREATE INDEX idx_items_category ON items(category_id);
+CREATE INDEX idx_items_abc ON item_sales(abc_revenue, snapshot_date DESC);
+CREATE INDEX idx_item_perf_date ON item_performance(item_id, snapshot_date DESC);
+CREATE INDEX idx_item_perf_score ON item_performance(score, snapshot_date DESC);
+CREATE INDEX idx_item_exp_gauge ON item_experience(health_gauge, snapshot_date DESC);
+CREATE INDEX idx_item_specs_score ON item_specs(score_percent, snapshot_date DESC);
+CREATE INDEX idx_alerts_open ON alerts(account_id, resolved, severity, created_at DESC);
+CREATE INDEX idx_price_comp_status ON price_competition(suggestion_status, snapshot_date DESC);
+CREATE INDEX idx_price_comp_item ON price_competition(item_id, snapshot_date DESC);
+CREATE INDEX idx_freight_item ON freight_changes(item_id, change_date DESC);
+```
+
+---
+
+# 4. MAPA COMPLETO DE ENDPOINTS DA API <a name="endpoints"></a>
+
+## 4.1 Conta e Reputação
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /users/$USER_ID` | level_id, power_seller_status, metrics (claims, cancellations, delayed), ratings, tags do vendedor | 4x/dia |
+| `GET /users/$USER_ID` com token | Dados privados: email, telefone, endereço | 1x setup |
+
+## 4.2 Itens e Busca
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /users/$USER_ID/items/search?status=active` | Lista de item_ids ativos (paginado, 50/página) | 1x/dia |
+| `GET /users/$USER_ID/items/search?reputation_health_gauge=unhealthy` | Itens JÁ perdendo exposição | 2x/dia |
+| `GET /users/$USER_ID/items/search?reputation_health_gauge=warning` | Itens em risco | 2x/dia |
+| `GET /users/$USER_ID/items/search?tags=catalog_forewarning` | Itens pendentes de catálogo | 1x/dia |
+| `GET /users/$USER_ID/items/search?missing_product_identifiers=true` | Itens sem GTIN/EAN | 1x/dia |
+| `GET /items?ids=id1,id2,...` | Detalhes de até 20 itens por chamada (batch) | 1x/dia |
+| `GET /items/$ITEM_ID?include_internal_attributes=true` | Item com atributos N/A visíveis | Sob demanda |
+
+## 4.3 Qualidade e Score
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /item/$ITEM_ID/performance` | Score 0-100, level, buckets com ações pendentes (SUBSTITUI /health) | 1x/dia Curva A, 1x/semana resto |
+| `GET /items/$ITEM_ID/health` | Health 0.0-1.0, actions (legado, ainda funciona) | Backup |
+| `GET /items/$ITEM_ID/health/actions` | Lista de ações: picture, technical_specification, video, upgrade_listing | Sob demanda |
+| `GET /reputation/items/$ITEM_ID/purchase_experience` | Cor, valor 0-100, problemas detalhados (L1/L2/L3) | Para itens unhealthy/warning |
+
+## 4.4 Ficha Técnica e Atributos (O QUE O ECOMMERCE PURO FAZ)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /categories/$CATEGORY_ID/attributes` | TODOS os atributos incluindo hidden, com tags (required, hidden, catalog_required, etc.) | Cache por categoria |
+| `GET /categories/$CATEGORY_ID/technical_specs/input` | Ficha técnica estruturada: grupos, componentes, atributos com valores possíveis, tags, hierarquia | Cache por categoria |
+| `GET /domains/$DOMAIN_ID/technical_specs` | Ficha por domínio (inclui tabela de medidas) | Cache por domínio |
+| `GET /catalog_quality/status?seller_id=$ID&include_items=true&v=3` | Por seller: quais itens incompletos, quais atributos faltam, quality_level | 1x/dia |
+| `GET /catalog_quality/status?item_id=$ID&v=3` | Por item: integridade e qualidade | Sob demanda |
+| `GET /categories/$CATEGORY_ID/attributes/conditional` (POST) | Valida se atributos conditional_required são necessários para o item | Na publicação |
+| `GET /sites/MLB/health_levels` | Ranges de score por nível (Basic: 0-49, Standard: 50-65, Professional: 66-100) | 1x setup |
+
+## 4.5 Preços e Promoções
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /items/$ITEM_ID/prices` | Preço standard + todas promoções ativas (tipo, valor, canal, período) | 1x/dia |
+| `GET /items/$ITEM_ID/sale_price?context=channel_marketplace,buyer_loyalty_3` | Preço final que comprador vê | 1x/dia |
+| `POST /items/$ITEM_ID/prices/standard` | NOVO endpoint para editar preços (PUT /items rejeitado a partir 03/2026) | Quando necessário |
+
+## 4.6 Competitividade de Preço (99% FORA DO CATÁLOGO)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /suggestions/user/$USER_ID/items` | Lista de item_ids que têm sugestão de preço do ML | 1x/dia |
+| `GET /suggestions/items/$ITEM_ID/details` | Preço sugerido baseado em concorrentes internos E externos (funciona pra TRADICIONAL) | 1x/dia Curva A, 2x/sem resto |
+| `GET /pricing-automation/items/$ITEM_ID/automation` | Verifica se item tem automatização de preço ativa (bloqueia edição) | 1x/dia |
+| Tag `not_market_price` via `/items/$ID` → `tags` | ML marcou preço como não competitivo vs. outros marketplaces | Já coletado pelo tags_collector |
+| `GET /items/$ITEM_ID/price_to_win?version=v2` | Preço pra ganhar Buy Box (SÓ funciona pra ~1% catálogo) | 1x/dia só pra itens de catálogo |
+
+## 4.7 Compatibilidades de Veículos (CRITICAL — AUTOPEÇAS)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /users/$SELLER_ID/items/search?tags=incomplete_compatibilities` | Itens que PRECISAM de compatibilidade (risco de pausamento) | 2x/dia |
+| `GET /users/$SELLER_ID/items/search?tags=pending_compatibilities` | Itens com sugestões de compatibilidade do ML | 1x/dia |
+| `GET /users/$SELLER_ID/items/search?tags=incomplete_position_compatibilities` | Itens com posição de aplicação pendente | 1x/dia |
+| `GET /items/$ITEM_ID/compatibilities` | Lista de veículos compatíveis já cadastrados | Sob demanda |
+| `POST /catalog_compatibilities/products_search/chunks` | Busca veículos disponíveis no catálogo ML + sugestões por item | Sob demanda |
+| `POST /catalog_compatibilities/products_search/count_family_products` | Conta veículos por domínio/atributos antes de associar | Antes de associar |
+| `POST /items/$ITEM_ID/compatibilities` | Adiciona compatibilidades (até 200 produtos por chamada, 100 rpm) | Via fila de correções |
+| `GET /catalog_domains/MLB-CARS_AND_VANS` | Atributos do domínio (BRAND, MODEL, VEHICLE_YEAR) | Cache |
+
+## 4.8 Pedidos e Envios
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /orders/search?seller=$SELLER_ID&order.date_created.from=...` | Pedidos com detalhes (valor, comissão, frete, status) | 1x/dia |
+| `GET /packs/$PACK_ID` | Detalhes do pack (pedidos agrupados) | Sob demanda |
+| `POST /shipments/$SHIPMENT_ID/process/ready_to_ship` | Marcar envio como pronto (ME2) | Operacional |
+
+## 4.9 Tempo de Despacho (NOVO)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /orders/search?seller=$ID&order.status=paid&sort=date_asc` | Pedidos pagos aguardando despacho (ordenados do mais antigo) | 4x/dia |
+| `GET /shipments/$SHIPMENT_ID` | Status do envio: handling → shipped. Campo date_created vs. agora = tempo de despacho | Com cada pedido |
+| `GET /users/$USER_ID/schedule` | Horários de despacho configurados (evitar atrasos por agenda errada) | 1x setup |
+
+## 4.10 Devoluções (NOVO)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /orders/search?seller=$ID&order.status=cancelled` | Pedidos cancelados (inclui devoluções) | 1x/dia |
+| `GET /claims/search?status=opened&user_id=$ID` | Reclamações abertas por tipo (devolução, não recebido, etc.) | 2x/dia |
+| Cruzamento: item_id com taxa de devolução alta | Identifica produtos problemáticos | No diagnóstico diário |
+
+## 4.11 Promoções ML (NOVO)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /seller-promotions/promotions?promotion_type=DEAL&status=started` | Campanhas DEAL ativas | 1x/dia |
+| `GET /items/$ITEM_ID/candidates` | Convites de promoção pendentes para o item | 1x/dia |
+| `GET /seller-promotions/promotions/$PROMO_ID/items?promotion_type=DEAL` | Itens participando de uma campanha | Sob demanda |
+
+## 4.12 Infrações e Restrições (NOVO)
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /users/$USER_ID/restrictions` | Restrições ativas na conta (tipo, motivo, vencimento) | 2x/dia |
+| Tag `under_infractions` via `/items/$ID` → `tags` | Item com infração ativa | Já coletado pelo tags_collector |
+| Tag `moderation_penalty` via `/items/$ID` → `tags` | Item penalizado por moderação | Já coletado pelo tags_collector |
+
+## 4.13 Estoque
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /user-products/$USER_PRODUCT_ID/stock` | Estoque por localização (Full, Flex, seller_warehouse) | 1x/dia |
+| `PUT /user-products/$USER_PRODUCT_ID/stock/type/seller_warehouse` | Atualizar estoque Flex (sellers com Multi Origem) | Operacional |
+
+## 4.14 Visitas
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /items/visits?ids=$ITEM_ID&date_from=...&date_to=...` | Visitas por item em período (total + detalhamento por dia) | 1x/dia Curva A |
+| `GET /users/$USER_ID/items_visits?date_from=...&date_to=...` | Total de visitas de todos os itens do seller | 1x/dia |
+| `GET /users/$USER_ID/items_visits/time_window?last=$N&unit=day` | Visitas por item com detalhamento diário (série temporal) | 1x/dia |
+
+## 4.15 Product Ads
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /advertising/advertisers/$ID/product_ads/campaigns?metrics=clicks,prints,ctr,cost,cpc,acos,...&date_from=...&date_to=...` | Métricas por campanha (até 90 dias) | 1x/dia |
+| `GET /advertising/product_ads/items/$ITEM_ID` | Status do item nos Ads + buy_box_winner | 1x/dia |
+| `GET /advertising/advertisers?product_id=PADS` | ID do advertiser | 1x setup |
+
+## 4.16 Webhooks (Tempo Real)
+
+| Tópico | Eventos |
+|--------|---------|
+| `items` | Mudanças em anúncios (preço, estoque, status, moderação) |
+| `items_prices` | Alterações de preço |
+| `catalog_item_competition_status` | **NOVO** Mudança de status Buy Box (winner↔competitor) — dispara price_monitor |
+| `best_price_eligible` | Nova promoção criada ou item perdeu destaque especial no catálogo |
+| `orders_v2` | Novos pedidos, mudanças de status |
+| `shipments` | Status de envio |
+
+## 4.17 Reputação e Recuperação
+
+| Endpoint | Dados | Frequência |
+|----------|-------|------------|
+| `GET /users/reputation/seller_recovery` | Status do programa Decola/Benefício de Reputação | 1x/dia se aplicável |
+| `POST /users/reputation/seller_recovery/activate` | Ativar programa de recuperação | Sob demanda |
+
+---
+
+# 5. MÓDULOS — ESPECIFICAÇÃO TÉCNICA <a name="modulos"></a>
+
+## 5.1 core/auth.py
+
+```python
+"""
+Gerenciamento de tokens OAuth2 para as 4 contas.
+
+Responsabilidades:
+- Verificar validade do token antes de cada chamada
+- Refresh automático 30 min antes de expirar
+- Persistir novos tokens no banco E no .env
+- ATENÇÃO: refresh_token é uso único — após refresh, o antigo é invalidado
+
+Endpoint de refresh:
+POST https://api.mercadolibre.com/oauth/token
+{
+  "grant_type": "refresh_token",
+  "client_id": APP_ID,
+  "client_secret": SECRET_KEY,
+  "refresh_token": CURRENT_REFRESH_TOKEN
+}
+"""
+```
+
+## 5.2 core/api_client.py
+
+```python
+"""
+Cliente HTTP async com proteções.
+
+Configuração:
+- Rate limit: 30 req/s (configurável via settings)
+- Retry: backoff exponencial em 429 (rate limit ML)
+- Retry: até 3 tentativas em 500/502/503
+- Timeout: 30s por chamada
+- Logging: endpoint, status, tempo de resposta
+- Métricas: total chamadas, erros, tempo médio
+
+Dependências: httpx, tenacity, asyncio.Semaphore
+
+Métodos:
+- get(path, account_id, params) -> dict
+- post(path, account_id, data) -> dict
+- get_batch(item_ids, account_id, batch_size=20) -> list[dict]
+  Usa /items?ids=id1,id2,... com até 20 IDs por chamada
+"""
+```
+
+## 5.3 collectors/technical_specs.py (O MÓDULO CHAVE)
+
+```python
+"""
+Replica a lógica da planilha "Ficha Técnica 3.0" do Ecommerce Puro.
+
+Fluxo:
+1. Para cada item, pegar category_id
+2. Verificar se categoria já está em cache (category_attributes_cache)
+3. Se não: GET /categories/$CATEGORY_ID/technical_specs/input
+   - Parsear TODOS os atributos
+   - Classificar por tipo baseado nas tags:
+     * 'required' ou 'catalog_required' → OBRIGATÓRIO
+     * 'hidden' → OCULTO (não aparece no front, só via API!)
+     * sem tags especiais → COMUM
+     * com 'relevance' alta → RELEVANTE
+   - Salvar no cache
+4. Para cada item: GET /items/$ITEM_ID (com include_internal_attributes=true)
+5. Comparar atributos do item com atributos da categoria
+6. Calcular score:
+   - Score = (soma dos pesos dos atributos preenchidos) / (soma dos pesos de todos os aplicáveis)
+   - Peso por tipo: required=3, hidden=2, relevant=2, common=1
+7. Gerar lista de atributos pendentes por prioridade
+8. Salvar em item_specs
+
+IMPORTANTE: Atributos com tag 'hidden' são os que fazem a diferença —
+a maioria dos vendedores não preenche porque não aparecem no painel.
+Preencher esses atributos via API dá vantagem competitiva real.
+
+Cache: atualizar 1x por semana (categorias mudam raramente)
+Varredura: Curva A diário, resto semanal
+"""
+```
+
+## 5.4 collectors/tags_collector.py
+
+```python
+"""
+Replica a lógica da aba "Tags" da planilha Diagnóstico do Ecommerce Puro.
+
+Fluxo:
+1. Para cada item: extrair campo 'tags' do GET /items
+2. Para cada tag, classificar com base no tags_database.json:
+   - ▲ POSITIVA (ganho de exposição): catalog_boost, deal_of_the_day,
+     good_quality_picture, good_quality_thumbnail, meli_choice_candidate,
+     brand_verified, lightning_deal, today_promotion, warehouse_management, etc.
+   - ▼ NEGATIVA (perda de exposição) — 21 tags mapeadas pelo Ecommerce Puro:
+     catalog_forewarning, catalog_low_quality,
+     closed_by_contingency, dragged_bids_and_visits, dragged_visits,
+     fbm_in_process, incomplete_compatibilities, incomplete_position_compatibilities,
+     incomplete_technical_specs, misplaced_personal_data, moderation_penalty,
+     non_buyable_as_standalone, not_market_price, only_html_description,
+     pending_compatibilities, pictures_pending, poor_quality_picture,
+     poor_quality_thumbnail, test_item, under_infractions, unknown_quality_picture
+   - ▼ NEGATIVA (tags de vendedor): international_seller, ngo
+   - — NEUTRA: cart_eligible, immediate_payment, free_relist, etc.
+3. Calcular score de tags: (positivas - negativas) / total
+4. Gerar alertas para qualquer tag negativa encontrada
+5. Para vendedor: GET /users/$USER_ID → extrair tags do seller
+   - large_seller ▲, medium_seller_advanced ▲, normal —, ngo ▼, etc.
+
+Fonte dos pesos: aba "Tags" da planilha Ecommerce Puro (89 tags mapeadas)
+Salvar em: data/tags_database.json
+"""
+```
+
+## 5.5 analyzers/abc_curve.py
+
+```python
+"""
+Replica a lógica da aba "Anúncios" da Dashboard PRO do Ecommerce Puro.
+
+Curva ABC por faturamento E por repasse (lucro), usando vendas D-120/90/60/30.
+CONFIRMADO: corte em 120 dias (alinhado com Ecommerce Puro).
+REGIME TRIBUTÁRIO: Lucro Real (confirmado pelo seller).
+
+Lógica:
+1. Ordenar itens por faturamento D-120 (descendente)
+2. Calcular % acumulado
+3. Classificar:
+   - A: itens que representam até 80% do faturamento acumulado
+   - B: próximos 15% (80-95%)
+   - C: últimos 5% (95-100%)
+4. Repetir por repasse (faturamento - comissão - frete)
+5. Calcular métricas por grupo:
+   - QNT vendas por período (D-120, D-90, D-60, D-30)
+   - Faturamento por período
+   - Repasse por período
+   - Taxa de frete média
+   - Valor unitário médio
+   - Repasse unitário médio
+   - Mediações (total, % afetando reputação)
+   - Taxa de devolução por item
+6. Detectar tendência: comparar D-30 vs D-60 (crescendo ou caindo?)
+
+GRÁFICO DE VENDAS DIÁRIAS POR PRODUTO (curva de tendência):
+- Para cada item: agrupar pedidos por dia nos últimos 120 dias
+- Gerar série temporal: data → quantidade vendida naquele dia
+- No dashboard (detalhe do item): plotar gráfico de linha (Recharts)
+  mostrando vendas dia a dia com linha de tendência suavizada
+- Permite identificar: sazonalidade, impacto de promoções,
+  queda abrupta, crescimento sustentado
+- Salvar série diária na tabela item_daily_sales (nova)
+
+Output: cada item classificado com abc_revenue e abc_profit
+Priorização: Curva A tem prioridade máxima em TODAS as ações
+"""
+```
+
+## 5.6 analyzers/freight_analyzer.py
+
+```python
+"""
+Replica a lógica da aba "Fretes" da planilha Diagnóstico do Ecommerce Puro.
+
+Responsabilidades:
+1. Identificar itens com frete grátis abaixo de R$79 (custo pro vendedor)
+2. Manter lista de permanência (itens que DEVEM manter frete grátis)
+3. Monitorar mudanças de custo de frete (salvar histórico em freight_changes)
+4. Calcular impacto financeiro do frete na margem
+5. Alertar quando:
+   - Frete grátis foi ativado em item de baixo ticket (prejuízo)
+   - Custo de frete subiu >20% vs. última coleta
+   - Item está sem frete grátis mas concorrentes diretos têm
+
+Regras de frete do ML (Brasil 2025/2026):
+- Acima de R$79: frete grátis obrigatório (parte do custo pro vendedor)
+- R$19 a R$78,99: ML subsidia integralmente
+- Abaixo de R$19: vendedor paga 100%
+"""
+```
+
+## 5.7 collectors/dispatch_monitor.py (NOVO — CRITICAL)
+
+```python
+"""
+Monitora tempo de despacho para evitar atrasos que derrubam reputação.
+
+Fluxo:
+1. GET /orders/search?seller=$ID&order.status=paid&sort=date_asc
+   → Pedidos pagos aguardando despacho, do mais antigo primeiro
+2. Para cada pedido: calcular horas desde aprovação
+   → hours_pending = (now - date_created).total_hours
+3. GET /shipments/$SHIPMENT_ID → verificar se já foi despachado
+4. Classificar:
+   - < 24h: normal
+   - 24-48h: atenção
+   - > 48h: URGENTE (falta 24h pra virar atraso!)
+5. Alertar via Slack imediatamente quando tem pedido > 36h sem despacho
+6. Relatório diário: quantos pedidos pendentes por conta
+
+Meta: ZERO pedidos > 48h sem despacho
+Frequência: 4x/dia (6h, 10h, 14h, 18h)
+"""
+```
+
+## 5.8 collectors/returns.py (NOVO)
+
+```python
+"""
+Monitora devoluções por item para identificar produtos problemáticos.
+
+Um item com taxa alta de devolução recebe a tag unhealthy e perde
+exposição. Identificar cedo = corrigir antes de perder posição.
+
+Fluxo:
+1. GET /orders/search?seller=$ID com filtro por devoluções
+2. Cruzar com item_id → calcular taxa de devolução por produto
+   → return_rate = devoluções / vendas_totais_do_item
+3. Classificar:
+   - < 3%: normal
+   - 3-5%: atenção
+   - > 5%: produto problemático — investigar
+4. Identificar motivos recorrentes
+5. Alertar: "Produto X tem 8% de devolução — 3x acima da média"
+6. Cruzar com purchase_experience pra confirmar impacto na saúde
+
+Frequência: 1x/dia no diagnóstico
+"""
+```
+
+## 5.9 collectors/promotions.py (NOVO)
+
+```python
+"""
+Monitora convites de promoções do ML que vocês podem estar perdendo.
+
+O ML convida sellers pra campanhas DEAL e promoções especiais.
+Não participar = perder visibilidade que concorrentes estão ganhando.
+
+Fluxo:
+1. GET /seller-promotions/promotions?promotion_type=DEAL&status=started
+2. Para cada campanha: verificar quais itens são elegíveis
+3. Alertar: "Campanha X ativa — 23 itens elegíveis, 0 inscritos"
+4. Listar itens elegíveis com preço mínimo sugerido
+5. Métricas: % de convites aceitos vs. ignorados
+
+IMPORTANTE: Apenas monitorar e alertar. Decisão de participar é humana.
+Frequência: 1x/dia
+"""
+```
+
+## 5.10 collectors/infractions.py (NOVO)
+
+```python
+"""
+Monitora infrações ativas com detalhes, não apenas a tag.
+
+Fluxo:
+1. GET /users/$USER_ID/restrictions
+   → Lista de restrições ativas (tipo, motivo, deadline)
+2. Para cada restrição: classificar severidade
+   - Moderação leve: ajustar anúncio
+   - Moderação grave: risco de suspensão
+3. Gerar plano de ação específico por infração
+4. Alertar com deadline: "Infração X vence em 3 dias — ação: Y"
+
+Frequência: 2x/dia
+"""
+```
+
+## 5.11 collectors/price_monitor.py (MONITORADOR DE PREÇOS — 99% FORA DO CATÁLOGO)
+
+```python
+"""
+Monitora competitividade de preço para anúncios TRADICIONAIS (fora do catálogo).
+
+IMPORTANTE: 99% dos anúncios NÃO são de catálogo, então o endpoint
+/price_to_win NÃO funciona para a maioria. O monitoramento usa:
+
+Fonte 1 — Sugestões de preço do ML (PRINCIPAL):
+  GET /suggestions/user/$USER_ID/items
+    → Lista de item_ids que têm sugestão de preço
+  GET /suggestions/items/$ITEM_ID/details
+    → Preço sugerido baseado em concorrentes internos E externos
+    → Status: no_benchmark_ok (preço bom), no_benchmark_lowest (abaixo do sugerido)
+    → Tipo de sugestão: concorrência de preços ou campanha unhealthy
+
+  ATENÇÃO: O preço sugerido é INFORMATIVO, nunca automático.
+  Muitas vezes o ML compara produtos errados e a sugestão fica discrepante.
+  O sistema mostra a sugestão, a equipe decide se aplica ou não.
+
+Fonte 2 — Tag not_market_price (REATIVO):
+  Já coletada pelo tags_collector.
+  Quando presente, o ML já está PENALIZANDO visibilidade.
+  Alerta imediato: 🔴
+
+Fonte 3 — Automatização de preços do ML (OPCIONAL — desativado por padrão):
+  GET /pricing-automation/items/$ITEM_ID/automation
+    → Verifica se o item tem automatização ativa
+    → Se tiver, o preço não pode ser editado via API
+  POST /pricing-automation/items/$ITEM_ID/automation
+    → Ativa automatização com regra INT_EXT e limites min/max
+    → NÃO ativar automaticamente — apenas informar no relatório
+    → A decisão de ativar é humana (risco de guerra de preços)
+
+Fonte 4 — price_to_win (SECUNDÁRIO — apenas ~1% catálogo):
+  GET /items/$ITEM_ID/price_to_win?version=v2
+    → Só funciona pra itens com catalog_product_id
+    → Mantido como secundário para os poucos itens de catálogo
+
+Fluxo:
+1. GET /suggestions/user/$USER_ID/items → lista de itens com sugestão
+2. Para cada item da lista: GET /suggestions/items/$ITEM_ID/details
+3. Comparar preço atual vs. preço sugerido
+4. Calcular gap: (preço_atual - preço_sugerido) / preço_sugerido * 100
+5. Salvar em price_competition
+6. Gerar alertas:
+   - 🔴 not_market_price detectado (já perdendo visibilidade)
+   - 🟡 Preço >15% acima da sugestão ML (risco de tag)
+   - ℹ️ Preço sugerido disponível (informativo)
+
+Priorização: Curva A 1x/dia, resto 2x/semana
+"""
+```
+
+## 5.12 collectors/compatibilities.py (CRITICAL — AUTOPEÇAS)
+
+```python
+"""
+Monitora compatibilidades de veículos para itens de autopeças.
+MÓDULO PRINCIPAL — o ML cobra bastante em autopeças, item sem
+compatibilidade perde exposição e pode ser pausado.
+
+Segmento: carros e picapes (linha leve). Não inclui motos nem caminhões.
+Categoria MLB: MLB1747 (Acessórios para Veículos), MLB22693 (Autopeças)
+Domínio: MLB-CARS_AND_VANS
+
+Fluxo de monitoramento:
+1. Identificar itens com compatibilidades pendentes:
+   GET /users/$SELLER_ID/items/search?tags=incomplete_compatibilities
+     → Itens que PRECISAM de compatibilidade para evitar pausamento
+   GET /users/$SELLER_ID/items/search?tags=pending_compatibilities
+     → Itens que TÊM sugestões de compatibilidade do ML
+   GET /users/$SELLER_ID/items/search?tags=incomplete_position_compatibilities
+     → Itens com posição de aplicação pendente
+
+2. Para cada item: verificar compatibilidades atuais:
+   GET /items/$ITEM_ID/compatibilities
+     → Lista de veículos compatíveis já cadastrados
+
+3. Buscar sugestões de compatibilidade do ML:
+   POST /catalog_compatibilities/products_search/chunks
+   {
+     "domain_id": "MLB-CARS_AND_VANS",
+     "site_id": "MLB",
+     "filter": "SUGGESTED",
+     "item_id": "$ITEM_ID",
+     "known_attributes": [
+       {"id": "BRAND", "value_name": "Volkswagen"},
+       {"id": "MODEL", "value_name": "Gol"}
+     ]
+   }
+     → Retorna veículos sugeridos pelo ML baseado no produto
+
+4. Contar veículos disponíveis por domínio (validação):
+   POST /catalog_compatibilities/products_search/count_family_products
+     → Valida antes de associar (máximo 200 produtos por chamada)
+
+5. Para itens universais (servem em qualquer veículo):
+   POST /items/$ITEM_ID/compatibilities
+   {"products":[], "products_families":[], "products_group":[], "universal": true}
+
+6. Gerar alertas:
+   - 🔴 incomplete_compatibilities: item SERÁ pausado se não resolver
+   - 🟡 pending_compatibilities: ML tem sugestões, só precisa aprovar
+   - 🟡 incomplete_position_compatibilities: falta posição de aplicação
+   - ℹ️ Compatibilidade cadastrada mas incompleta (<5 veículos)
+
+Rate limit: 100 rpm por APP_ID para endpoints de compatibilidade
+Máximo: 200 produtos por chamada de associação
+
+Salva em: item_specs (campo compatibilities_status) + alerts
+Mostra em: tela "Saúde dos anúncios" com filtro por compatibilidade
+"""
+```
+
+## 5.13 analyzers/scoring.py
+
+```python
+"""
+Score GERAL consolidado do anúncio (0-100).
+
+Composição do score (pesos ajustáveis em thresholds.py):
+
+| Componente           | Peso | Fonte                              | Sprint |
+|----------------------|------|------------------------------------|----|
+| Score de qualidade   | 25%  | /item/$ID/performance → score      | 3  |
+| Ficha técnica        | 20%  | item_specs → score_percent         | 3  |
+| Experiência compra   | 20%  | item_experience → reputation_value | 2  |
+| Tags                 | 15%  | tags_analyzer → score              | 3  |
+| Imagens              | 10%  | performance buckets → UP_PICTURES  | 3  |
+| Conversão            | 10%  | item_sales → conversion_rate       | 4  |
+
+NOTA: Competitividade de preço (price_health) e frete (freight_analyzer)
+são adicionados ao score no Sprint 6 quando os dados passam a existir.
+O scoring.py usa pesos dinâmicos — se um componente não tem dados,
+redistribui o peso entre os demais. Isso permite que o score funcione
+desde o Sprint 4 e fique mais completo conforme os sprints avançam.
+
+Score final = soma ponderada, normalizado 0-100
+Meta: 100% dos itens Curva A com score ≥ 85
+"""
+```
+
+---
+
+# 6. LÓGICAS DE NEGÓCIO DAS PLANILHAS <a name="logicas"></a>
+
+## 6.1 Da planilha "Diagnóstico de Anúncios"
+
+- **70+ campos por anúncio** extraídos da API (search tab)
+- **Análise de 89 tags** com peso de impacto (▲▼-)
+- **Classificação de qualidade de imagens** (excelente/boa/mediana/ruim)
+- **Monitoramento de frete** com lista de permanência e histórico de mudanças
+- **Tracking de infrações e moderações** por anúncio
+- **Visão consolidada** com filtros (listings, filter tabs)
+- **Gráficos de tendência**: infrações, visitas D-120, ficha técnica
+
+## 6.2 Da planilha "Dashboard PRO 2.0"
+
+- **Reputação e certificação** do vendedor com histórico
+- **Métricas da conta**: reclamações/atrasos/cancelamentos com notas (0-100)
+- **Vendas D-120/90/60/30** com tendência e ticket médio
+- **Curva ABC** por faturamento e repasse com mediações por item
+- **Análise geográfica**: vendas por estado e região
+- **Formas de pagamento e envio**: distribuição por tipo
+- **Metas mensais e diárias** com variação e acumulado
+- **Previsão de repasses**: recebido, confirmado, pendente, negativo
+- **Gestão de estoque**: saudável, risco de ruptura, excedente, antigo (+60 dias), fora de venda
+
+## 6.3 Da planilha "Ficha Técnica 3.0"
+
+- **Puxa atributos da categoria** via API (incluindo hidden!)
+- **Classifica por tipo**: obrigatório 🔴, oculto ⭕, comum 🔵, relevante 🟣
+- **Calcula score** de completude com pesos por tipo
+- **Identifica pendências** com ação específica por atributo
+- **Diagnóstico por combinação de variações** (user products)
+- **Permite marcar "Não se aplica"** para atributos irrelevantes
+
+## 6.4 Da planilha "Gerador de Títulos"
+
+- **Gera variações** a partir de um título-base
+- **Grupos de palavras-chave** para inserção/substituição
+- **Opções**: remover caracteres especiais, acentos, traços
+- **Inserção e remoção manual** de termos
+
+## 6.5 Da planilha "Precificação Lucro Real"
+
+- **Tabela ICMS interestadual** 27x27 estados
+- **Cálculo de CMV**: ICMS, ICMS-ST, IPI, PIS, COFINS com créditos
+- **Teses fiscais**: retirar ICMS da base PIS/COFINS, crédito presumido, DIFAL
+- **Multi-canal**: ML Clássico, Premium, Shopee, Magalu, Amazon, Americanas
+- **GMV mensal** com ponto de equilíbrio e margem de contribuição
+- **Custos fixos e variáveis** da operação
+
+---
+
+# 7. SISTEMA DE DIAGNÓSTICO DIÁRIO <a name="diagnostico"></a>
+
+## 7.1 Limiares do Semáforo
+
+### Nível Conta
+
+```python
+ACCOUNT_THRESHOLDS = {
+    "claims_rate": {"green": 0.015, "yellow": 0.025},
+    "cancellations_rate": {"green": 0.015, "yellow": 0.020},
+    "delayed_rate": {"green": 0.05, "yellow": 0.08},
+    "sales_vs_last_week": {"green": 0.90, "yellow": 0.70},
+}
+```
+
+### Nível Anúncio
+
+```python
+ITEM_THRESHOLDS = {
+    "performance_score": {"green": 80, "yellow": 66},
+    "specs_score_percent": {"green": 80, "yellow": 60},
+    "experience_value": {"green": 80, "yellow": 50},
+    "stock_days": {"green": 30, "yellow": 7},
+    "ads_roas": {"green": 4.0, "yellow": 2.0},
+    "conversion_rate": {"green": 0.03, "yellow": 0.015},
+    "price_vs_suggestion_percent": {"green": 5, "yellow": 15},
+    # acima de 15% do sugerido ML = red (risco de tag not_market_price)
+    "compat_status": {"green": "complete", "yellow": "pending_suggestions"},
+    # incomplete = red (risco de pausamento em autopeças)
+    "dispatch_hours_max": {"green": 24, "yellow": 48},
+    # > 48h = red (vai virar atraso)
+    "return_rate": {"green": 0.03, "yellow": 0.05},
+    # > 5% devolução por item = red
+}
+```
+
+## 7.2 Fluxo do Diagnóstico (run_diagnostic.py)
+
+```
+04:00 — COLETA PESADA (background)
+├── Para cada conta (paralelo):
+│   ├── GET /users/$USER_ID → reputação
+│   ├── GET /items/search?status=active → lista de itens
+│   ├── Para cada item (batch de 20, rate limited):
+│   │   ├── GET /items?ids=... → detalhes
+│   │   ├── GET /item/$ITEM_ID/performance → score
+│   │   └── (Curva A apenas) GET /reputation/.../purchase_experience
+│   ├── GET /items/search?reputation_health_gauge=unhealthy
+│   ├── GET /items/search?reputation_health_gauge=warning
+│   ├── GET /items/search?tags=catalog_forewarning
+│   ├── GET /items/search?missing_product_identifiers=true
+│   ├── GET /catalog_quality/status?seller_id=...&include_items=true
+│   ├── (Curva A) GET /suggestions/items/$ITEM_ID/details → preço sugerido
+│   ├── GET /items/search?tags=incomplete_compatibilities → AUTOPEÇAS
+│   ├── GET /items/search?tags=pending_compatibilities → sugestões ML
+│   ├── GET /users/$USER_ID/restrictions → infrações ativas
+│   ├── GET /seller-promotions/promotions?status=started → promoções disponíveis
+│   └── Cruzar pedidos cancelados por item → taxa de devolução
+│
+06:00 — ANÁLISE
+├── Calcular curva ABC D-120 (abc_curve.py) + gerar série vendas diárias
+├── Analisar tags (tags_analyzer.py)
+├── Calcular gap de ficha técnica (specs_gap.py)
+├── Verificar compatibilidades de veículos (compatibilities.py)
+├── Verificar fretes (freight_analyzer.py)
+├── Analisar competitividade de preço via sugestões ML (price_health.py)
+├── Analisar devoluções por item (returns → purchase_experience)
+├── Verificar infrações ativas com deadline (infractions.py)
+├── Verificar promoções ML não aceitas (promotions.py)
+├── Detectar tendências (trends.py)
+├── Aplicar semáforo (semaphore.py)
+├── Gerar score consolidado (scoring.py)
+├── Gerar alertas e plano de ação (action_generator.py)
+│
+07:00 — RELATÓRIO
+├── Compilar relatório diário (daily_report.py)
+├── Enviar Slack (slack_sender.py)
+└── Enviar e-mail semanal (email_sender.py)
+```
+
+---
+
+# 8. RELATÓRIO DIÁRIO <a name="relatorio"></a>
+
+```
+═══════════════════════════════════════════
+  DIAGNÓSTICO ML — {{ data }}
+═══════════════════════════════════════════
+
+📊 PAINEL DAS 4 CONTAS
+
+{% for conta in contas %}
+{{ conta.emoji }} {{ conta.name }} ({{ conta.level_id }})
+  Reclamações: {{ conta.claims_rate }}% | Cancel: {{ conta.cancel_rate }}% | Atrasos: {{ conta.delayed_rate }}%
+  Vendas ontem: {{ conta.sales_yesterday }} (meta: {{ conta.sales_target }}) {{ conta.sales_emoji }}
+  Unhealthy: {{ conta.unhealthy }} | Warning: {{ conta.warning }}
+  Despacho pendente: {{ conta.pending_dispatch }}
+{% endfor %}
+
+⏱️ DESPACHO
+- {{ dispatch.pending_24h }} pedidos < 24h (ok)
+- {{ dispatch.pending_48h }} pedidos 24-48h (atenção)
+- {{ dispatch.pending_critical }} pedidos > 48h (DESPACHAR AGORA!)
+
+NOTA: Perguntas e mensagens são gerenciadas pela Predize (Claudenice).
+O sistema monitora apenas as métricas de reputação (% reclamações/cancelamentos/atrasos).
+
+🚨 URGENTE ({{ urgentes|length }} ações)
+{% for acao in urgentes %}
+{{ loop.index }}. [{{ acao.conta }}] {{ acao.titulo }}
+   → {{ acao.acao }}
+{% endfor %}
+
+📋 IMPORTANTE ({{ importantes|length }} ações)
+{% for acao in importantes %}
+{{ loop.index }}. [{{ acao.conta }}] {{ acao.titulo }}
+   → {{ acao.acao }}
+{% endfor %}
+
+🏷️ COMPETITIVIDADE DE PREÇO
+- {{ price.with_suggestion }} itens têm sugestão de preço do ML
+- {{ price.above_suggestion }} itens com preço acima do sugerido (gap médio {{ price.avg_gap }}%)
+- {{ price.not_market_price }} itens com tag not_market_price (JÁ perdendo visibilidade)
+{% if price.top_gaps %}
+  Maiores gaps Curva A:
+{% for item in price.top_gaps[:5] %}
+  - {{ item.title }}: teu R${{ item.price }} vs. sugerido R${{ item.suggested }} (gap {{ item.gap_percent }}%)
+{% endfor %}
+{% endif %}
+
+🚗 COMPATIBILIDADES DE VEÍCULOS
+- {{ compat.incomplete }} itens com compatibilidade obrigatória PENDENTE (risco pausamento)
+- {{ compat.pending }} itens com sugestões do ML disponíveis
+- {{ compat.position_missing }} itens com posição de aplicação faltando
+{% if compat.incomplete > 0 %}
+  ⚠️ AÇÃO URGENTE: {{ compat.incomplete }} itens podem ser pausados pelo ML
+{% endif %}
+
+📈 OPORTUNIDADES
+- {{ oportunidades.specs_gap }} anúncios podem subir score preenchendo ficha técnica
+- {{ oportunidades.hidden_fields }} atributos ocultos não preenchidos na Curva A
+- {{ oportunidades.ads_increase }} itens com ROAS > 5x (aumentar budget)
+- {{ oportunidades.negative_tags }} itens com tags negativas removíveis
+- {{ oportunidades.compat_suggestions }} itens podem melhorar aceitando sugestões de compatibilidade
+- {{ oportunidades.promotions_pending }} convites de promoção ML não aceitos
+
+{% if returns.problem_items > 0 %}
+🔄 DEVOLUÇÕES
+- {{ returns.problem_items }} itens com taxa de devolução > 5% (investigar)
+{% for item in returns.top_problems[:3] %}
+  - {{ item.title }}: {{ item.return_rate }}% de devolução ({{ item.total_returns }} devoluções)
+{% endfor %}
+{% endif %}
+
+{% if infractions.active > 0 %}
+⚠️ INFRAÇÕES ATIVAS
+{% for inf in infractions.list %}
+  - [{{ inf.conta }}] {{ inf.type }}: {{ inf.description }} — vence em {{ inf.days_left }} dias
+{% endfor %}
+{% endif %}
+═══════════════════════════════════════════
+```
+
+---
+
+# 9. CRON JOBS <a name="cron"></a>
+
+```bash
+# Refresh tokens (a cada 5h)
+0 */5 * * * cd /opt/ml-diagnostico && python -m scripts.token_refresh
+
+# Coleta pesada — performance de todos os itens (4h)
+0 4 * * * cd /opt/ml-diagnostico && python -m scripts.run_collectors_heavy
+
+# Diagnóstico diário completo (6h)
+0 6 * * * cd /opt/ml-diagnostico && python -m scripts.run_diagnostic
+
+# Envio do relatório (7h)
+0 7 * * * cd /opt/ml-diagnostico && python -m scripts.send_report
+
+# Saúde das contas (a cada 6h)
+0 */6 * * * cd /opt/ml-diagnostico && python -m scripts.run_account_health
+
+# Despacho pendente — CRITICAL (6h, 10h, 14h, 18h)
+0 6,10,14,18 * * * cd /opt/ml-diagnostico && python -m scripts.run_dispatch_monitor
+
+# Métricas de Ads (10h — após atualização do ML às 10h GMT-3)
+0 10 * * * cd /opt/ml-diagnostico && python -m scripts.run_ads_metrics
+
+# Auditoria de ficha técnica (segunda-feira 5h)
+0 5 * * 1 cd /opt/ml-diagnostico && python -m scripts.run_specs_audit
+
+# Verificação de fretes (terça e sexta 5h)
+0 5 * * 2,5 cd /opt/ml-diagnostico && python -m scripts.run_freight_check
+
+# Monitoramento de preço (sugestões ML) — Curva A (10h)
+0 10 * * * cd /opt/ml-diagnostico && python -m scripts.run_price_monitor --priority=A
+
+# Monitoramento de preço — Curva B e C (terça e sexta 10h)
+0 10 * * 2,5 cd /opt/ml-diagnostico && python -m scripts.run_price_monitor --priority=all
+
+# Compatibilidades de veículos — AUTOPEÇAS (8h e 15h)
+0 8,15 * * * cd /opt/ml-diagnostico && python -m scripts.run_compat_check
+
+# Cache de categorias (domingo 3h)
+0 3 * * 0 cd /opt/ml-diagnostico && python -m scripts.refresh_category_cache
+```
+
+---
+
+# 10. SPRINTS DE IMPLEMENTAÇÃO <a name="sprints"></a>
+
+```
+SPRINT 1 — Fundação (Semana 1-2)
+├── config/settings.py, accounts.py, thresholds.py
+├── core/auth.py (refresh automático)
+├── core/api_client.py (rate limiting + retry)
+├── core/database.py (SQLAlchemy async)
+├── scripts/setup_db.py (cria todas as tabelas)
+├── scripts/authorize_account.py (helper OAuth)
+└── TESTE: 4 contas autenticadas e fazendo GET /users/me
+
+SPRINT 2 — Coletores Essenciais (Semana 2-3)
+├── collectors/account_health.py
+├── collectors/item_search.py (paginação)
+├── collectors/item_health_gauge.py (unhealthy/warning)
+├── collectors/purchase_experience.py (experiência de compra por item unhealthy/warning)
+├── collectors/catalog_forewarning.py
+├── collectors/missing_identifiers.py
+├── collectors/tags_collector.py
+├── collectors/compatibilities.py (AUTOPEÇAS — tags de compat pendente)
+├── scripts/initial_scan.py (primeira varredura)
+└── TESTE: saber quantos itens unhealthy/warning/forewarning/compat pendente existem
+
+SPRINT 3 — Score e Ficha Técnica (Semana 3-4)
+├── collectors/item_performance.py (score 0-100)
+├── collectors/technical_specs.py (INCLUI HIDDEN — o diferencial)
+├── collectors/catalog_quality.py
+├── data/tags_database.json (89 tags com pesos)
+├── analyzers/specs_gap.py
+├── analyzers/tags_analyzer.py
+└── TESTE: score de cada anúncio + gap de ficha técnica
+
+SPRINT 4 — Análise e Relatório (Semana 4-5)
+├── collectors/orders.py + visits.py + reviews.py + returns.py
+├── analyzers/abc_curve.py
+├── analyzers/semaphore.py
+├── analyzers/action_generator.py
+├── analyzers/scoring.py (score consolidado)
+├── reporters/daily_report.py (template Jinja2)
+├── scripts/run_diagnostic.py (orquestrador)
+└── TESTE: relatório diário completo gerado
+
+SPRINT 5 — Notificações + Operacional (Semana 5-6)
+├── reporters/slack_sender.py (webhook Slack, canal #ml-diagnostico)
+├── reporters/email_sender.py (relatório semanal)
+├── collectors/dispatch_monitor.py (pedidos pendentes de despacho)
+├── collectors/promotions.py (convites de promoção ML)
+├── collectors/infractions.py (infrações ativas + detalhes)
+├── cron/ (todos os jobs incl. dispatch 4x/dia)
+├── Configurar crontab na VPS
+└── TESTE: relatório chegando no Slack às 7h, alertas de despacho funcionando
+    NOTA: Perguntas e mensagens pós-venda são gerenciadas pela Predize (Claudenice)
+
+SPRINT 6 — Ads + Frete + Preço + Compatibilidades (Semana 6-7)
+├── collectors/ads_metrics.py
+├── collectors/prices.py
+├── collectors/price_monitor.py (sugestões de preço ML — NÃO automático, só informativo)
+├── collectors/shipping.py + stock.py
+├── analyzers/freight_analyzer.py
+├── analyzers/price_health.py (sugestões ML + not_market_price + automação verificação)
+├── analyzers/trends.py
+├── Compatibilidades: busca de sugestões via /catalog_compatibilities/products_search/chunks
+├── Cron: run_price_monitor (1x/dia Curva A, 2x/sem resto)
+├── Cron: run_compat_check (2x/dia — critical pra autopeças)
+└── TESTE: sugestões de preço de cada item, itens com compat pendente listados, fretes analisados
+
+SPRINT 7 — Dashboard Web + Webhooks (Semana 7-9)
+├── Stack: React (Vite) + FastAPI + Nginx na VPS
+├── webhooks/server.py (FastAPI — recebe notificações ML)
+├── webhooks/handlers.py
+├── api/server.py (FastAPI — backend do dashboard)
+├── api/routes.py
+├── frontend/ (React + Vite + Tailwind)
+│
+├── TELAS DO DASHBOARD (organizadas por setor/tarefa):
+│
+│   T1 — DASHBOARD GERAL (página inicial)
+│   ├── Filtro de data (De/Até) que filtra todos os dados da tela
+│   ├── 4 cards de conta (Toyo/SAC/Oficial/Denzel):
+│   │   Reputação (reclamações/cancelamentos/atrasos) + pedidos + faturamento R$ + despacho pendente
+│   ├── 8 cards KPI consolidados:
+│   │   Pedidos (período) | Faturamento R$ (período) | Score médio | Itens com problema
+│   │   Compat pendentes | Ficha técnica % | Frete sobre vendas % | Estoque em risco
+│   ├── Gráfico vendas diárias com toggle Quantidade/Valor R$ + filtro 7d/30d/90d
+│   ├── "Problemas a resolver" (sem perguntas — só problemas reais):
+│   │   Compatibilidades | Despacho atrasado | Unhealthy | Reclamações | Warning
+│   │   Ruptura | Devoluções recorrentes | Infrações ativas
+│   └── Objetivo: bater o olho em 10 segundos e saber o status
+│
+│   T2 — SAÚDE DOS ANÚNCIOS (lista + página dedicada do item)
+│   ├── LISTA:
+│   │   ├── Seletor de conta (Toyo/SAC/Oficial/Denzel)
+│   │   ├── Filtros: curva ABC | score range | busca por título, SKU, MLB
+│   │   ├── Ordenação: score menor/maior, vendas D-30, ficha %
+│   │   ├── Filtros rápidos com contadores:
+│   │   │   "Unhealthy" | "Warning" | "Compat pendente" | "Ficha incompleta"
+│   │   │   "Sem EAN" | "Tag negativa" | "Score < 66"
+│   │   ├── Checkboxes pra seleção em lote
+│   │   ├── Barra de ação em lote (quando selecionados):
+│   │   │   "Aplicar compatibilidade em lote" | "Gerar correções para fila"
+│   │   └── Clicou no item → abre PÁGINA DEDICADA (/saude/:item_id)
+│   │
+│   ├── PÁGINA DEDICADA DO ITEM (6 cards em grid 2 colunas):
+│   │   ├── Header: thumb, título, MLB, SKU, conta, preço, estoque, badges
+│   │   ├── 4 score cards: Score ML | Ficha % | Conversão | Avaliação
+│   │   ├── Card 1: Ficha técnica EDITÁVEL
+│   │   │   - Campos preenchidos (texto) vs. vazios (input editável)
+│   │   │   - Tags por campo: obrigatório (vermelho), hidden (amarelo), comum
+│   │   │   - Botão "Salvar ficha técnica" (ANY + ML direto)
+│   │   │   - Botão "Pedir sugestão ao Claude" ← NOVO
+│   │   │     → Envia título + categoria + atributos existentes pra API Claude (Sonnet)
+│   │   │     → Claude sugere valores pros campos vazios
+│   │   │     → Preenche os inputs automaticamente, vendedor revisa e salva
+│   │   ├── Card 2: Compatibilidades (sugestões ML como chips + aceitar/buscar)
+│   │   ├── Card 3: Vendas e desempenho (D-30/60/90/120 em qty e R$)
+│   │   │   + Gráfico de vendas diárias (curva 120 dias)
+│   │   ├── Card 4: Ações pendentes (ML) com ganho estimado por ação
+│   │   ├── Card 5: Tags do anúncio (positivas/negativas/neutras)
+│   │   ├── Card 6: Preço e competitividade (atual vs. sugerido ML)
+│   │   └── Navegação: "← Anterior | Abrir no ML | Próximo →"
+│   │
+│   └── Objetivo: gerir qualidade + editar + corrigir sem sair do sistema
+│
+│   T3 — GESTÃO DE ESTOQUE
+│   ├── KPIs: estoque total (un), itens com cobertura < 30d, cobertura 30-60d, parado +60d
+│   │   NOTA: valor de custo do estoque NÃO vem da API do ML.
+│   │   Se quiser mostrar R$ de custo, precisa vir do ERP/ANYMARKET.
+│   │   Sem essa integração, mostra só quantidades.
+│   ├── Cobertura de estoque calculada por item:
+│   │   dias_estoque = available_quantity / (vendas_d30 / 30)
+│   │   Faixas: 30 / 60 / 90 dias de cobertura
+│   │   Controle de fornecedor/lead time fica no ERP
+│   ├── Filtros rápidos: ruptura | < 30d | 30-60d | 60-90d | > 90d | parado +60d | fora de venda
+│   ├── Estoque antigo: itens sem venda há +60 dias com estoque parado
+│   ├── Estoque fora de venda: itens pausados/inativos com estoque
+│   ├── Gráfico: distribuição horizontal de cobertura de estoque
+│   └── Objetivo: monitorar cobertura em dias e identificar rupturas/capital parado
+│
+│   T4 — CAMPANHAS ADS (Product Ads ML)
+│   ├── Filtro de data (De/Até) + seletor de conta + filtro por campanha
+│   ├── Visão consolidada por conta:
+│   │   Investimento total | Vendas Ads | ROAS geral | CTR médio | SOW
+│   ├── Lista por item: ROAS, custo, cliques, impressões, conversão
+│   ├── Grant Ads: histórico de evolução, campanhas elegíveis vs. aderidas
+│   ├── Recomendações automáticas:
+│   │   - "Aumentar budget" itens com ROAS > 5x
+│   │   - "Reduzir budget" itens com ROAS < 2x
+│   │   - "Ativar Ads" itens Curva A sem campanha ativa
+│   │   - "Pausar Ads" itens sem conversão há 14+ dias
+│   ├── Gráfico: ROAS por período + investimento vs. retorno
+│   └── Objetivo: otimizar budget de Ads pra máximo retorno
+│
+│   T5 — CONTROLE DE FRETE
+│   ├── Cards: faturamento, custo frete, % sobre vendas, frete médio por pedido
+│   ├── Filtros rápidos:
+│   │   "Frete grátis < R$79" | "> 15% do preço" | "Custo subiu > 20%"
+│   │   "Lista permanência" | "Todos com frete grátis" | "Sem frete grátis"
+│   ├── Tabela: anúncio, preço, custo frete, % sobre preço, tipo envio, status
+│   ├── Gráfico 1: evolução % frete sobre vendas (30/60/90 dias)
+│   ├── Gráfico 2: vendas por UF (SP, MG, PR, RS...) com custo médio frete
+│   ├── Histórico de mudanças de frete (freight_changes)
+│   ├── Lista de permanência: itens que DEVEM manter frete grátis
+│   └── Objetivo: controlar impacto do frete na margem por UF
+│
+│   T6 — FILA DE CORREÇÕES
+│   ├── 3 abas: Pendentes | Executadas | Rejeitadas
+│   ├── Cada correção mostra:
+│   │   Item | Campo | Valor atual/novo | Rota (ANY/ML) | Ganho estimado
+│   ├── Botões: Aprovar | Editar valor | Rejeitar
+│   ├── Aprovação em lote: selecionar múltiplas correções de uma vez
+│   ├── Tipos: Ficha técnica | EAN | Compatibilidades | Título | Preço
+│   ├── Log de execução: quando executou, se confirmou no ML, erros
+│   └── Objetivo: centralizar todas as ações corretivas
+│
+│   T7 — COMPETITIVIDADE DE PREÇO
+│   ├── Cards: itens com sugestão ML | acima do sugerido | not_market_price
+│   ├── Lista: Título | Teu preço | Sugerido ML | Gap % | Ação
+│   ├── Aviso: "Sugestões ML podem comparar errado — VALIDAR"
+│   ├── Ação: "Ajustar preço" manda pra fila (modo APROVAÇÃO)
+│   ├── Histórico de preço por item (gráfico evolução)
+│   └── Objetivo: manter preços competitivos sem guerra de preços
+│
+└── TESTE: 7 telas funcionando com dados reais, filtros operacionais
+
+    ESPECIFICAÇÃO FRONTEND (Sprint 7 — detalhamento técnico):
+    
+    ROTAS DO REACT ROUTER:
+    /                           → T1 Dashboard geral
+    /saude                      → T2 Lista de anúncios
+    /saude/:item_id             → T2b Página dedicada do item
+    /estoque                    → T3 Gestão de estoque
+    /ads                        → T4 Campanhas Ads
+    /frete                      → T5 Controle de frete
+    /correcoes                  → T6 Fila de correções
+    /precos                     → T7 Competitividade de preço
+    /login                      → Login (autenticação básica)
+    
+    LAYOUT COMPARTILHADO:
+    ├── Sidebar fixa à esquerda com menu de navegação (7 itens + logo)
+    ├── Header com nome do sistema + seletor de conta global
+    ├── Área principal à direita (conteúdo da rota)
+    └── Seletor de conta no header afeta TODAS as telas exceto T1 (que mostra as 4)
+    
+    COMPONENTES REUTILIZÁVEIS:
+    ├── KpiCard.jsx              — card de métrica (label, valor, subtítulo, cor)
+    ├── DataTable.jsx            — tabela com paginação, ordenação, busca
+    ├── QuickFilters.jsx         — botões de filtro rápido com contadores
+    ├── DateRangePicker.jsx      — seletor De/Até
+    ├── AccountSelector.jsx      — dropdown de conta (global no header)
+    ├── ProgressBar.jsx          — barra de progresso com cor dinâmica
+    ├── Badge.jsx                — badge colorido (unhealthy, warning, etc.)
+    ├── LineChart.jsx             — wrapper do Recharts pra gráfico de linha
+    ├── BarChart.jsx              — wrapper do Recharts pra gráfico de barras
+    └── HorizontalBarChart.jsx   — wrapper pra gráfico horizontal
+    
+    AUTENTICAÇÃO:
+    ├── Login simples (usuário + senha) — NÃO é OAuth do ML
+    ├── JWT token armazenado em memória (não localStorage)
+    ├── Middleware FastAPI verifica token em toda requisição
+    ├── Usuários configurados no .env (DASHBOARD_USER, DASHBOARD_PASSWORD)
+    └── Session expira em 24h, redireciona pra /login
+    
+    API INTERNA (FastAPI → frontend):
+    
+    GET  /api/accounts
+      → Lista as 4 contas com reputação atual
+    
+    GET  /api/dashboard?date_from=...&date_to=...
+      → KPIs consolidados: pedidos, faturamento, score médio, unhealthy,
+        compat pendentes, ficha %, frete %, estoque risco
+      → "Problemas a resolver" priorizados
+    
+    GET  /api/dashboard/sales-chart?period=30d
+      → Vendas diárias das 4 contas (qty e revenue)
+    
+    GET  /api/items?account_id=...&page=1&limit=50&sort=score_asc
+         &filter=unhealthy&search=amortecedor&curve=A
+      → Lista paginada de itens com score, ficha %, compat, tags, saúde, curva
+    
+    GET  /api/items/:item_id
+      → Detalhes completos: ficha técnica editável, compatibilidades,
+        vendas D-30/60/90/120, ações pendentes, tags, preço
+    
+    GET  /api/items/:item_id/daily-sales?days=120
+      → Série temporal de vendas diárias pra gráfico
+    
+    GET  /api/items/:item_id/specs
+      → Ficha técnica: campos preenchidos + vazios + tipo (obrigatório/hidden/comum)
+      → Valores aceitos pelo ML pra cada campo (select options)
+    
+    PUT  /api/items/:item_id/specs
+      → Salvar ficha técnica editada
+      → Backend decide rota: ANYMARKET (normais) ou API ML (hidden)
+    
+    POST /api/items/:item_id/claude-suggestion
+      → Backend envia título+categoria+atributos pra API Claude (Sonnet)
+      → Retorna sugestões de preenchimento
+    
+    POST /api/items/batch/compatibilities
+      → Body: { item_ids: [...], vehicle_ids: [...] }
+      → Cria correções na fila pra cada item+veículo
+    
+    POST /api/items/batch/corrections
+      → Body: { item_ids: [...] }
+      → Gera correções de ficha técnica pra todos os selecionados
+    
+    GET  /api/stock?account_id=...&page=1&limit=50&filter=ruptura&sort=coverage_asc
+      → Lista de itens com estoque, venda/dia, cobertura em dias
+    
+    GET  /api/ads?account_id=...&date_from=...&date_to=...&campaign_id=...
+      → Métricas de Ads por item: ROAS, custo, cliques, impressões
+    
+    GET  /api/ads/grant?account_id=...
+      → Saldo Grant, campanhas elegíveis vs. aderidas
+    
+    GET  /api/freight?account_id=...&date_from=...&date_to=...
+      → Itens com custo de frete, % sobre preço, tipo envio
+    
+    GET  /api/freight/by-state?account_id=...&date_from=...&date_to=...
+      → Vendas e custo médio de frete por UF
+    
+    GET  /api/corrections?status=pending&type=specs_fill&page=1&limit=50
+      → Lista de correções na fila
+    
+    PUT  /api/corrections/:id/approve
+      → Aprova correção → backend executa via ANYMARKET ou ML
+    
+    PUT  /api/corrections/:id/reject
+      → Rejeita correção
+    
+    PUT  /api/corrections/:id/edit
+      → Edita valor da correção antes de aprovar
+    
+    POST /api/corrections/batch/approve
+      → Body: { ids: [...] } → Aprova múltiplas de uma vez
+    
+    GET  /api/prices?account_id=...&filter=above_suggestion&sort=gap_desc
+      → Itens com preço atual vs. sugerido ML
+    
+    GET  /api/prices/:item_id/history?days=90
+      → Histórico de preço do item (série temporal)
+    
+    POST /api/auth/login
+      → Body: { user, password } → Retorna JWT token
+
+SPRINT 8 — Correção Automática via ANYMARKET + API ML (Semana 9-12)
+│
+├── FASE A: Integração ANYMARKET (Semana 9-10)
+│   ├── integrations/anymarket_client.py (cliente HTTP pra API ANYMARKET v2)
+│   ├── integrations/anymarket_products.py (GET/PUT produtos e características)
+│   ├── integrations/anymarket_skus.py (GET/PUT SKUs, preço, estoque, EAN)
+│   ├── integrations/anymarket_sync.py (orquestra envio de correções)
+│   ├── Config: token ANYMARKET, URL base (produção/sandbox)
+│   └── TESTE: ler e atualizar 1 produto de teste via API ANYMARKET
+│
+├── FASE B: Motor de Correção (Semana 10-11)
+│   ├── correctors/specs_corrector.py (preenche ficha técnica)
+│   │   ├── Rota 1 (ANYMARKET): atributos normais + obrigatórios
+│   │   │   → PUT /products/{id} com characteristics[] no ANYMARKET
+│   │   │   → ANYMARKET sincroniza com ML automaticamente
+│   │   └── Rota 2 (API ML direto): campos HIDDEN que ANY não gerencia
+│   │       → PUT /items/$ITEM_ID com attributes[] direto no ML
+│   │       → Testar primeiro: verificar se ANY não sobrescreve
+│   │
+│   ├── correctors/title_optimizer.py (otimiza títulos)
+│   │   → Aplica regras: Produto + Marca + Modelo + Atributo + Variação
+│   │   → Remove caracteres especiais, stuffing, maiúsculas excessivas
+│   │   → Envia via ANYMARKET API
+│   │
+│   ├── correctors/price_adjuster.py (ajusta preços)
+│   │   → Baseado em sugestões ML (quando equipe aprova)
+│   │   → Limites de segurança: min/max configuráveis (ANYMARKET já tem!)
+│   │   → Envia via ANYMARKET API (respeita limite de segurança do ANY)
+│   │   → NUNCA automático — sempre modo APROVAÇÃO
+│   │
+│   ├── correctors/ean_filler.py (preenche GTIN/EAN faltantes)
+│   │   → Busca EAN no cadastro do ANYMARKET → se existe, preenche no ML
+│   │   → Envia via ANYMARKET API (campo partnerId/ean do SKU)
+│   │
+│   ├── correctors/compat_filler.py (preenche compatibilidades — AUTOPEÇAS)
+│   │   → Busca sugestões de compatibilidade do ML (pending_compatibilities)
+│   │   → FUNCIONALIDADE EM LOTE: selecionar grupo de veículos (ex: "Gol, Voyage, Saveiro 2018-2024")
+│   │     e aplicar pra múltiplos anúncios de uma vez (ex: 50 peças que servem nesses carros)
+│   │   → Na tela "Saúde dos anúncios": filtrar por "compat pendente" → selecionar itens
+│   │     → escolher veículos → um clique manda tudo pra fila
+│   │   → Apresenta na fila de aprovação com lista de veículos por item
+│   │   → Após aprovação: POST /items/$ITEM_ID/compatibilities (até 200 prod/chamada)
+│   │   → Rota: SEMPRE API ML direto (ANYMARKET não gerencia compat)
+│   │   → Modo: APROVAÇÃO (nunca automático — risco de compat errada)
+│   │
+│   └── TESTE: corrigir 10 itens de teste, validar no ML se ficou correto
+│
+├── FASE C: Fila de Aprovação (Semana 11-12)
+│   ├── correctors/correction_queue.py (fila de correções pendentes)
+│   │   ├── Modo AUTO: correções seguras executam sozinhas
+│   │   │   → EAN quando existe no cadastro
+│   │   │   → Preço dentro dos limites configurados
+│   │   │   → Campos hidden via API ML (após validação)
+│   │   │
+│   │   ├── Modo APROVAÇÃO: correções que precisam de revisão humana
+│   │   │   → Ficha técnica (valores precisam ser validados)
+│   │   │   → Título (precisa revisão humana)
+│   │   │   → Preço fora dos limites (precisa aprovação)
+│   │   │
+│   │   └── Modo SUGESTÃO: apenas informa no relatório
+│   │       → Adicionar fotos (precisa upload manual)
+│   │       → Adicionar vídeo (precisa URL YouTube)
+│   │       → Ativar Full/parcelamento (decisão estratégica)
+│   │
+│   ├── api/approval_routes.py (endpoints pra aprovar/rejeitar correções)
+│   ├── reporters/correction_report.py (relatório de correções aplicadas)
+│   └── TESTE: fluxo completo — diagnóstico → fila → aprovação → execução → verificação
+│
+└── MÉTRICAS DO SPRINT 8:
+    - [ ] Ficha técnica Curva A: de X% pra 100% (incluindo campos hidden)
+    - [ ] EAN preenchido em todos os itens que têm no cadastro
+    - [ ] Zero itens com missing_product_identifiers tendo EAN no ANY
+    - [ ] Correções automáticas executando sem intervenção humana
+    - [ ] Fila de aprovação funcionando via dashboard web
+```
+
+---
+
+# 11. PROMPTS PARA CLAUDE CODE <a name="prompts"></a>
+
+## Sprint 1
+
+```
+Estou construindo um sistema de diagnóstico automatizado para 4 contas
+do Mercado Livre com ~15.000 anúncios.
+
+Stack: Python 3.11+, PostgreSQL (asyncpg), FastAPI, httpx async.
+
+O blueprint completo está no arquivo blueprint-definitivo-ml.md que
+vou colar abaixo. Leia TODA a seção de Arquitetura, Banco de Dados,
+e a especificação do Sprint 1.
+
+Implemente:
+1. config/settings.py — pydantic-settings carregando .env
+2. config/accounts.py — modelo das 4 contas
+3. config/thresholds.py — limiares do semáforo
+4. core/auth.py — refresh automático OAuth2 (token expira 6h, refresh uso único)
+5. core/api_client.py — httpx async com Semaphore(30), retry 429/5xx via tenacity
+6. core/database.py — SQLAlchemy async com todo o schema do blueprint
+7. scripts/setup_db.py — cria tabelas
+8. scripts/authorize_account.py — CLI helper para gerar tokens
+
+Use type hints, docstrings em português, logging com loguru.
+Estruture como package Python importável.
+```
+
+## Sprint 2
+
+```
+Continuando o projeto ml-diagnostico. Sprint 2: Coletores Essenciais.
+
+Implemente usando o api_client.py do Sprint 1:
+1. collectors/item_search.py — GET /users/$USER_ID/items/search?status=active
+   com paginação (50 por página), retorna lista completa de item_ids
+2. collectors/account_health.py — GET /users/$USER_ID, extrai seller_reputation
+   completa incluindo dados de proteção (real_level, excluded)
+3. collectors/item_health_gauge.py — 3 chamadas por conta:
+   unhealthy, warning + para cada unhealthy: GET /reputation/.../purchase_experience
+4. collectors/catalog_forewarning.py — busca + GET /items/$ID/catalog_forewarning/date
+5. collectors/missing_identifiers.py — busca simples com paginação
+6. collectors/tags_collector.py — extrai tags de /items batch, classifica ▲▼-
+7. scripts/initial_scan.py — roda todos os coletores, imprime resumo
+
+ATENÇÃO ao rate limit: usar asyncio.Semaphore(30).
+Toda coleta salva no PostgreSQL.
+```
+
+## Sprint 3
+
+```
+Sprint 3: Score e Ficha Técnica.
+
+Este é o sprint mais importante — aqui mora o diferencial competitivo.
+
+1. collectors/item_performance.py
+   - GET /item/$ITEM_ID/performance para cada item
+   - Priorizar: primeiro Curva A, depois score < 66
+   - Para 15.000 itens: usar batch com Semaphore, ~35 min total
+   - Salvar score, level, buckets em item_performance
+
+2. collectors/technical_specs.py (O MÓDULO CHAVE)
+   Replicar a lógica da planilha "Ficha Técnica 3.0" do Ecommerce Puro:
+   a) GET /categories/$CATEGORY_ID/technical_specs/input → cachear
+   b) Classificar cada atributo por tags:
+      - 'required'/'catalog_required' → OBRIGATÓRIO (peso 3)
+      - 'hidden' → OCULTO (peso 2) — SÓ APARECE VIA API!
+      - com relevance alta → RELEVANTE (peso 2)
+      - sem tags especiais → COMUM (peso 1)
+   c) Para cada item: comparar atributos do item vs. categoria
+   d) Calcular score: soma(pesos preenchidos) / soma(pesos aplicáveis)
+   e) Gerar lista de pendentes ordenada por peso
+
+3. collectors/catalog_quality.py
+   - GET /catalog_quality/status?seller_id=$ID&include_items=true&v=3
+   - Mapeia quais itens estão incompletos e quais atributos faltam
+
+4. Criar data/tags_database.json com as 89 tags e pesos da planilha EP
+
+5. analyzers/specs_gap.py — consolida gap de ficha técnica
+6. analyzers/tags_analyzer.py — analisa tags e gera score/alertas
+```
+
+---
+
+# 12. MÉTRICAS DE SUCESSO <a name="metricas"></a>
+
+### Semana 2 (Sprint 1-2 concluído)
+- [ ] 4 contas autenticadas com refresh automático
+- [ ] Quantidade exata de itens unhealthy, warning, forewarning
+- [ ] Tags negativas identificadas em cada conta
+
+### Semana 4 (Sprint 3-4 concluído)
+- [ ] Score de qualidade de CADA anúncio (15.000)
+- [ ] Gap de ficha técnica detalhado por item (incluindo campos hidden)
+- [ ] Curva ABC calculada — saber quais são os top 20% que geram 80% do faturamento
+- [ ] Relatório diário sendo gerado localmente
+
+### Semana 6 (Sprint 5-6 concluído)
+- [ ] Relatório chegando no Slack às 7h todos os dias
+- [ ] Zero itens unhealthy (todos tratados)
+- [ ] Zero itens com catalog_forewarning sem ação
+- [ ] Zero itens com incomplete_compatibilities sem ação (AUTOPEÇAS)
+- [ ] ROAS por item monitorado
+- [ ] Sugestões de preço ML coletadas pra todos os itens Curva A
+- [ ] % frete sobre vendas calculado por conta
+
+### Mês 2
+- [ ] 100% Curva A com score ≥ 85
+- [ ] Ficha técnica 100% nos Curva A (incluindo campos hidden)
+- [ ] Compatibilidades preenchidas em 100% dos itens obrigatórios
+- [ ] 4 contas verde-escuro estável
+- [ ] Tendência de vendas visível e ascendente
+- [ ] Dashboard 7 telas funcionando, equipe usando diariamente
+
+### Mês 3
+- [ ] Diagnóstico 100% automatizado
+- [ ] Gestão diária em 30-60 min (vs. "o dia todo" atualmente)
+- [ ] Vendas recuperando vs. período anterior
+- [ ] Sistema rodando sem intervenção manual
+- [ ] Correções automáticas via ANYMARKET executando sem problemas
+- [ ] Compatibilidades gerenciadas pela fila de aprovação
