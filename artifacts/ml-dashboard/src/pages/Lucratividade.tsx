@@ -4,10 +4,6 @@ import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/GlobalContext";
 import { SALES_PROFITABILITY, type SaleProfitability } from "@/mock/data";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell,
-} from "recharts";
 import { TrendingUp, Download, ChevronDown, ChevronUp, ChevronsUpDown, Truck, Megaphone, Receipt } from "lucide-react";
 
 const BRL = (v: number) =>
@@ -16,32 +12,23 @@ const BRL = (v: number) =>
 const PCT = (v: number) => `${v.toFixed(1)}%`;
 
 function marginColor(m: number) {
-  if (m >= 15) return "text-teal-700";
-  if (m >= 8)  return "text-amber-600";
+  if (m > 10) return "text-teal-700";
+  if (m >= 0) return "text-amber-600";
   return "text-red-600";
 }
 function marginBg(m: number) {
-  if (m >= 15) return "bg-teal-50 text-teal-700 border-teal-200";
-  if (m >= 8)  return "bg-amber-50 text-amber-700 border-amber-200";
+  if (m > 10) return "bg-teal-50 text-teal-700 border-teal-200";
+  if (m >= 0) return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-red-50 text-red-700 border-red-200";
 }
 
 type SortKey = keyof SaleProfitability | null;
 type SortDir = "asc" | "desc";
 
-const COST_COLORS = {
-  cmv:          "#6366f1",
-  mlCommission: "#f97316",
-  shippingCost: "#0ea5e9",
-  adsCost:      "#a855f7",
-  taxAmount:    "#eab308",
-  packagingCost:"#94a3b8",
-  netProfit:    "#0d9488",
-};
 
 export default function Lucratividade() {
   const { selectedAccountId } = useGlobalContext();
-  const [period, setPeriod]   = useState<7 | 15 | 30>(30);
+  const [period, setPeriod]   = useState<7 | 15 | 30 | 60 | 90>(30);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -102,27 +89,6 @@ export default function Lucratividade() {
     return { revenue, cmv, mlComm, shipping, ads, tax, packaging, netProfit, grossProfit, avgNetMargin, avgGrossMargin, count: base.length };
   }, [base]);
 
-  const chartData = useMemo(() => {
-    const byProduct: Record<string, { label: string; cmv: number; mlCommission: number; shippingCost: number; adsCost: number; taxAmount: number; packagingCost: number; netProfit: number }> = {};
-    for (const s of base) {
-      const key = s.sku;
-      if (!byProduct[key]) {
-        byProduct[key] = { label: s.sku, cmv: 0, mlCommission: 0, shippingCost: 0, adsCost: 0, taxAmount: 0, packagingCost: 0, netProfit: 0 };
-      }
-      byProduct[key].cmv           += s.cmv;
-      byProduct[key].mlCommission  += s.mlCommission;
-      byProduct[key].shippingCost  += s.shippingCost;
-      byProduct[key].adsCost       += s.adsCost;
-      byProduct[key].taxAmount     += s.taxAmount;
-      byProduct[key].packagingCost += s.packagingCost;
-      byProduct[key].netProfit     += s.netProfit;
-    }
-    return Object.values(byProduct).sort((a, b) =>
-      (b.netProfit + b.cmv + b.mlCommission + b.shippingCost + b.adsCost + b.taxAmount + b.packagingCost) -
-      (a.netProfit + a.cmv + a.mlCommission + a.shippingCost + a.adsCost + a.taxAmount + a.packagingCost)
-    );
-  }, [base]);
-
   const headerCls = "px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide select-none cursor-pointer hover:text-foreground transition-colors whitespace-nowrap";
 
   return (
@@ -137,7 +103,7 @@ export default function Lucratividade() {
       <div className="flex items-center gap-2 mb-6">
         <span className="text-xs text-muted-foreground font-medium">Período:</span>
         <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-          {([7, 15, 30] as const).map(p => (
+          {([7, 15, 30, 60, 90] as const).map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -151,49 +117,17 @@ export default function Lucratividade() {
 
       {/* KPI cards — linha 1 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
-        <KpiCard label="Faturamento bruto"  value={BRL(kpis.revenue)}    icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard label="CMV total (ERP)"    value={BRL(kpis.cmv)}        icon={<TrendingUp className="h-4 w-4" />} subtext={`${PCT(kpis.cmv / kpis.revenue * 100)} da receita`} />
-        <KpiCard label="Lucro líquido"      value={BRL(kpis.netProfit)}  icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem ${PCT(kpis.avgNetMargin)}`} />
-        <KpiCard label="Pedidos analisados" value={kpis.count}           icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem bruta ${PCT(kpis.avgGrossMargin)}`} />
+        <KpiCard label="Faturamento bruto"   value={BRL(kpis.revenue)}   icon={<TrendingUp className="h-4 w-4" />} />
+        <KpiCard label="CMV — ERP"           value={BRL(kpis.cmv)}       icon={<TrendingUp className="h-4 w-4" />} subtext={`${PCT(kpis.cmv / kpis.revenue * 100)} da receita`} />
+        <KpiCard label="Lucro líquido"       value={BRL(kpis.netProfit)} icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem ${PCT(kpis.avgNetMargin)}`} />
+        <KpiCard label="Pedidos analisados"  value={kpis.count}          icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem bruta ${PCT(kpis.avgGrossMargin)}`} />
       </div>
       {/* KPI cards — linha 2: custos detalhados */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Comissão ML"        value={BRL(kpis.mlComm)}     icon={<TrendingUp className="h-4 w-4" />} subtext={PCT(kpis.mlComm / kpis.revenue * 100)} />
-        <KpiCard label="Frete (custo real)" value={BRL(kpis.shipping)}   icon={<Truck className="h-4 w-4" />}     subtext={PCT(kpis.shipping / kpis.revenue * 100)} />
-        <KpiCard label="Ads Product"        value={BRL(kpis.ads)}        icon={<Megaphone className="h-4 w-4" />} subtext={PCT(kpis.ads / kpis.revenue * 100)} />
-        <KpiCard label="ICMS (interestadual)" value={BRL(kpis.tax)}      icon={<Receipt className="h-4 w-4" />}   subtext={`Média ${PCT(kpis.tax / kpis.revenue * 100)} · 2,6% + DIFAL`} />
-      </div>
-
-      {/* Stacked bar chart */}
-      <div className="bg-white rounded-2xl border border-border p-6 mb-6" style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
-        <h3 className="font-bold text-sm text-foreground mb-1">Composição de Custos por Produto (R$)</h3>
-        <p className="text-xs text-muted-foreground mb-4">Empilhamento de custos sobre o faturamento — barra teal = lucro líquido</p>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={chartData} margin={{ left: 10, right: 20, top: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" />
-            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent"
-              tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ background: "white", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-              formatter={(v: number, name: string) => [BRL(v), ({
-                cmv: "CMV", mlCommission: "Comissão ML", shippingCost: "Frete",
-                adsCost: "Ads", taxAmount: "Impostos", packagingCost: "Embalagem", netProfit: "Lucro Líquido",
-              } as Record<string,string>)[name] ?? name]}
-            />
-            <Legend formatter={(value: string) => ({
-              cmv: "CMV", mlCommission: "Comissão ML", shippingCost: "Frete",
-              adsCost: "Ads", taxAmount: "Impostos", packagingCost: "Embalagem", netProfit: "Lucro Líquido",
-            } as Record<string,string>)[value] ?? value} />
-            <Bar dataKey="cmv"           stackId="a" fill={COST_COLORS.cmv}           isAnimationActive={false} />
-            <Bar dataKey="mlCommission"  stackId="a" fill={COST_COLORS.mlCommission}  isAnimationActive={false} />
-            <Bar dataKey="shippingCost"  stackId="a" fill={COST_COLORS.shippingCost}  isAnimationActive={false} />
-            <Bar dataKey="adsCost"       stackId="a" fill={COST_COLORS.adsCost}       isAnimationActive={false} />
-            <Bar dataKey="taxAmount"     stackId="a" fill={COST_COLORS.taxAmount}     isAnimationActive={false} />
-            <Bar dataKey="packagingCost" stackId="a" fill={COST_COLORS.packagingCost} isAnimationActive={false} />
-            <Bar dataKey="netProfit"     stackId="a" fill={COST_COLORS.netProfit}     radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
+        <KpiCard label="Comissão — Mercado Livre" value={BRL(kpis.mlComm)}  icon={<TrendingUp className="h-4 w-4" />} subtext={PCT(kpis.mlComm / kpis.revenue * 100)} />
+        <KpiCard label="Frete — Mercado Livre"    value={BRL(kpis.shipping)} icon={<Truck className="h-4 w-4" />}     subtext={PCT(kpis.shipping / kpis.revenue * 100)} />
+        <KpiCard label="Ads — Mercado Livre"      value={BRL(kpis.ads)}      icon={<Megaphone className="h-4 w-4" />} subtext={PCT(kpis.ads / kpis.revenue * 100)} />
+        <KpiCard label="ICMS — Calculado"         value={BRL(kpis.tax)}      icon={<Receipt className="h-4 w-4" />}   subtext={`${PCT(kpis.tax / kpis.revenue * 100)} · 2,6% + DIFAL`} />
       </div>
 
       {/* Detailed table */}
