@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { KpiCard } from "@/components/KpiCard";
+import { useGlobalContext } from "@/contexts/GlobalContext";
 import {
   ACCOUNTS, DASHBOARD_KPIS, PROBLEMS, DAILY_SALES,
 } from "@/mock/data";
 import {
-  AreaChart, Area, XAxis, YAxis,
+  AreaChart, Area, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
@@ -77,17 +78,50 @@ function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
   );
 }
 
+const ACCOUNT_LINES = [
+  { id: 1, shortName: "Toyo (01)",    color: "#0d9488", qtyKey: "qty_1",     revKey: "revenue_1" },
+  { id: 2, shortName: "SAC (02)",     color: "#3b82f6", qtyKey: "qty_2",     revKey: "revenue_2" },
+  { id: 3, shortName: "Oficial (03)", color: "#8b5cf6", qtyKey: "qty_3",     revKey: "revenue_3" },
+  { id: 4, shortName: "Denzel (04)",  color: "#f97316", qtyKey: "qty_4",     revKey: "revenue_4" },
+] as const;
+
+const TOTAL_LINE = { shortName: "Total", color: "#1f2937", qtyKey: "qty", revKey: "revenue" } as const;
+
 function SalesChart({ data }: { data: typeof DAILY_SALES }) {
   const [period, setPeriod] = useState(30);
   const [mode, setMode] = useState<"qty" | "revenue">("qty");
+  const { selectedAccountId } = useGlobalContext();
   const sliced = data.slice(-period);
+
+  const xInterval = period === 7 ? 0 : period <= 30 ? 4 : 9;
+  const yFmt = (v: number) => mode === "revenue" ? `R$${(v / 1000).toFixed(0)}k` : String(v);
+  const tooltipFmt = (v: number, name: string) =>
+    mode === "revenue"
+      ? [v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), name]
+      : [v, name];
+
+  const gridStroke = "hsl(var(--border))";
+  const axisStyle  = { fontSize: 11, fill: "hsl(var(--muted-foreground))" };
+  const tooltipStyle = {
+    background: "white",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: 12,
+    fontSize: 12,
+    boxShadow: "0 4px 16px rgb(0 0 0 / .1)",
+  };
+
+  // Single account view
+  const singleLine = selectedAccountId
+    ? ACCOUNT_LINES.find(a => a.id === selectedAccountId) ?? null
+    : null;
 
   return (
     <div
       className="bg-white rounded-2xl p-6 border border-border"
       style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
     >
-      <div className="flex items-center justify-between mb-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-bold text-base text-foreground">Vendas Diárias</h3>
           <p className="text-xs text-muted-foreground mt-0.5">Últimos {period} dias</p>
@@ -117,34 +151,84 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
           </div>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={sliced} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
-          <defs>
-            <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(174, 72%, 36%)" stopOpacity={0.18} />
-              <stop offset="95%" stopColor="hsl(174, 72%, 36%)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" interval={period === 7 ? 0 : period <= 30 ? 4 : 9} />
-          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent"
-            tickFormatter={v => mode === "revenue" ? `R$${(v / 1000).toFixed(0)}k` : String(v)}
-          />
-          <Tooltip
-            contentStyle={{ background: "white", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 4px 16px rgb(0 0 0 / .1)" }}
-            formatter={(v: number) => mode === "revenue" ? [v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), "Receita"] : [v, "Pedidos"]}
-          />
-          <Area
-            type="monotone"
-            dataKey={mode}
-            stroke="hsl(174, 72%, 36%)"
-            strokeWidth={2.5}
-            fill="url(#tealGrad)"
-            dot={false}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+
+      {/* Legend — only when showing all accounts */}
+      {!singleLine && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-4">
+          {ACCOUNT_LINES.map(a => (
+            <span key={a.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="inline-block h-2 w-5 rounded-full" style={{ background: a.color }} />
+              {a.shortName}
+            </span>
+          ))}
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <span className="inline-block h-2 w-5 rounded-full" style={{ background: TOTAL_LINE.color }} />
+            {TOTAL_LINE.shortName}
+          </span>
+        </div>
+      )}
+
+      {/* Chart */}
+      {singleLine ? (
+        // Single account — AreaChart com preenchimento
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={sliced} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+            <defs>
+              <linearGradient id="singleGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor={singleLine.color} stopOpacity={0.18} />
+                <stop offset="95%" stopColor={singleLine.color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+            <XAxis dataKey="date" tick={axisStyle} stroke="transparent" interval={xInterval} />
+            <YAxis tick={axisStyle} stroke="transparent" tickFormatter={yFmt} />
+            <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} />
+            <Area
+              type="monotone"
+              dataKey={mode === "qty" ? singleLine.qtyKey : singleLine.revKey}
+              name={singleLine.shortName}
+              stroke={singleLine.color}
+              strokeWidth={2.5}
+              fill="url(#singleGrad)"
+              dot={false}
+              isAnimationActive={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        // Todas as contas — LineChart com 5 linhas (4 contas + total)
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={sliced} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+            <XAxis dataKey="date" tick={axisStyle} stroke="transparent" interval={xInterval} />
+            <YAxis tick={axisStyle} stroke="transparent" tickFormatter={yFmt} />
+            <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} />
+            {ACCOUNT_LINES.map(a => (
+              <Line
+                key={a.id}
+                type="monotone"
+                dataKey={mode === "qty" ? a.qtyKey : a.revKey}
+                name={a.shortName}
+                stroke={a.color}
+                strokeWidth={1.8}
+                dot={false}
+                isAnimationActive={false}
+              />
+            ))}
+            {/* Total — linha mais grossa e escura, acima das contas */}
+            <Line
+              type="monotone"
+              dataKey={mode === "qty" ? TOTAL_LINE.qtyKey : TOTAL_LINE.revKey}
+              name={TOTAL_LINE.shortName}
+              stroke={TOTAL_LINE.color}
+              strokeWidth={2.8}
+              strokeDasharray="6 3"
+              dot={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }

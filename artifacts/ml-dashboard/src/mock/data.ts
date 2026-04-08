@@ -91,14 +91,27 @@ export const PROBLEMS = [
   { type: "infractions", label: "Infrações ativas", count: 2, severity: "red" },
 ];
 
-export const DAILY_SALES = Array.from({ length: 30 }, (_, i) => {
+export const DAILY_SALES = Array.from({ length: 90 }, (_, i) => {
   const date = new Date();
-  date.setDate(date.getDate() - (29 - i));
-  const base = 45 + Math.sin(i * 0.5) * 15;
+  date.setDate(date.getDate() - (89 - i));
+
+  // Each account has its own sales rhythm
+  const qty_1 = Math.max(0, Math.round(12 + Math.sin(i * 0.40) * 4  + Math.random() * 8));
+  const qty_2 = Math.max(0, Math.round( 8 + Math.sin(i * 0.30 + 1) * 3 + Math.random() * 6));
+  const qty_3 = Math.max(0, Math.round(18 + Math.sin(i * 0.50 + 2) * 6 + Math.random() * 10));
+  const qty_4 = Math.max(0, Math.round( 7 + Math.sin(i * 0.60 + 3) * 2 + Math.random() * 4));
+
+  const revenue_1 = Math.round(qty_1 * 346);
+  const revenue_2 = Math.round(qty_2 * 311);
+  const revenue_3 = Math.round(qty_3 * 320);
+  const revenue_4 = Math.round(qty_4 * 273);
+
   return {
     date: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-    qty: Math.round(base + Math.random() * 20),
-    revenue: Math.round((base + Math.random() * 20) * 320),
+    qty_1, qty_2, qty_3, qty_4,
+    qty: qty_1 + qty_2 + qty_3 + qty_4,
+    revenue_1, revenue_2, revenue_3, revenue_4,
+    revenue: revenue_1 + revenue_2 + revenue_3 + revenue_4,
   };
 });
 
