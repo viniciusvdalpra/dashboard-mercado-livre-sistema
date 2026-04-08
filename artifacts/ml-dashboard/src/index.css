@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -65,87 +65,92 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 6px);
 }
+
+/* ================================================================
+   ACCURACK-INSPIRED DESIGN SYSTEM
+   Palette: Teal #0D9488, Light background #F1F5F9,
+            White cards, Dark sidebar pill #134E4A
+   ================================================================ */
 
 :root {
   color-scheme: light;
-  --opaque-button-border-intensity: -8;
+  --opaque-button-border-intensity: -6;
 
-  /* ── Page background: very slightly warm white ── */
-  --background:  220 14% 96%;
-  --foreground:  220 20% 10%;
+  /* ── Page background: very light blue-gray ── */
+  --background:  210 25% 96%;
+  --foreground:  220 25% 14%;
 
   /* ── Borders ── */
-  --border:      220 13% 88%;
-  --input:       220 13% 84%;
-  --ring:        43 75% 48%;
+  --border:      214 20% 90%;
+  --input:       214 20% 87%;
+  --ring:        174 72% 36%;
 
-  /* ── Cards: pure white with subtle shadow ── */
+  /* ── Cards: pure white ── */
   --card:            0 0% 100%;
-  --card-foreground: 220 20% 10%;
-  --card-border:     220 13% 91%;
+  --card-foreground: 220 25% 14%;
+  --card-border:     214 20% 92%;
 
   /* ── Popover ── */
   --popover:            0 0% 100%;
-  --popover-foreground: 220 20% 10%;
-  --popover-border:     220 13% 88%;
+  --popover-foreground: 220 25% 14%;
+  --popover-border:     214 20% 90%;
 
-  /* ── Primary: rich amber gold ── */
-  --primary:            43 75% 48%;
-  --primary-foreground: 220 20% 6%;
+  /* ── Primary: teal ── */
+  --primary:            174 72% 36%;
+  --primary-foreground: 0 0% 100%;
 
   /* ── Secondary ── */
-  --secondary:            220 12% 92%;
-  --secondary-foreground: 220 15% 28%;
+  --secondary:            214 20% 93%;
+  --secondary-foreground: 220 20% 30%;
 
   /* ── Muted ── */
-  --muted:            220 12% 94%;
-  --muted-foreground: 220 10% 48%;
+  --muted:            210 20% 95%;
+  --muted-foreground: 215 16% 52%;
 
-  /* ── Accent ── */
-  --accent:            43 75% 48%;
-  --accent-foreground: 220 20% 6%;
+  /* ── Accent: lighter teal ── */
+  --accent:            174 72% 36%;
+  --accent-foreground: 0 0% 100%;
 
   /* ── Destructive ── */
-  --destructive:            0 80% 38%;
+  --destructive:            0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  /* ── Sidebar: near-black with warm tint ── */
-  --sidebar:                    222 20% 9%;
-  --sidebar-foreground:         220 15% 70%;
-  --sidebar-border:             222 15% 14%;
-  --sidebar-primary:            43 75% 48%;
-  --sidebar-primary-foreground: 222 20% 9%;
-  --sidebar-accent:             222 15% 15%;
-  --sidebar-accent-foreground:  220 15% 88%;
-  --sidebar-ring:               43 75% 48%;
+  /* ── Sidebar: white with very light border ── */
+  --sidebar:                    0 0% 100%;
+  --sidebar-foreground:         220 16% 48%;
+  --sidebar-border:             214 20% 90%;
+  --sidebar-primary:            174 55% 26%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:             210 25% 96%;
+  --sidebar-accent-foreground:  220 20% 30%;
+  --sidebar-ring:               174 72% 36%;
 
   /* ── Charts ── */
-  --chart-1: 211 100% 50%;
-  --chart-2: 43 75% 48%;
-  --chart-3: 109 68% 36%;
-  --chart-4: 0 80% 38%;
-  --chart-5: 250 90% 62%;
+  --chart-1: 174 72% 36%;
+  --chart-2: 174 72% 55%;
+  --chart-3: 213 93% 58%;
+  --chart-4: 262 72% 60%;
+  --chart-5: 0 72% 51%;
 
   /* ── Typography ── */
   --app-font-sans:  'Inter', system-ui, -apple-system, sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono:  'JetBrains Mono', Menlo, monospace;
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 
-  /* ── Shadows ── */
+  /* ── Real shadows ── */
   --shadow-xs:  0 1px 2px rgb(0 0 0 / .05);
-  --shadow-sm:  0 1px 3px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .04);
-  --shadow:     0 4px 6px -1px rgb(0 0 0 / .08), 0 2px 4px -2px rgb(0 0 0 / .04);
-  --shadow-md:  0 10px 15px -3px rgb(0 0 0 / .08), 0 4px 6px -4px rgb(0 0 0 / .04);
-  --shadow-lg:  0 20px 25px -5px rgb(0 0 0 / .10), 0 8px 10px -6px rgb(0 0 0 / .04);
-  --shadow-xl:  0 25px 50px -12px rgb(0 0 0 / .18);
+  --shadow-sm:  0 1px 3px rgb(0 0 0 / .07), 0 1px 2px rgb(0 0 0 / .04);
+  --shadow:     0 4px 6px -1px rgb(0 0 0 / .07), 0 2px 4px -2px rgb(0 0 0 / .04);
+  --shadow-md:  0 10px 20px -4px rgb(0 0 0 / .09), 0 4px 6px -4px rgb(0 0 0 / .04);
+  --shadow-lg:  0 20px 30px -8px rgb(0 0 0 / .10), 0 8px 10px -6px rgb(0 0 0 / .04);
+  --shadow-xl:  0 28px 50px -12px rgb(0 0 0 / .15);
 
-  --tracking-normal: -0.011em;
+  --tracking-normal: -0.012em;
   --spacing: 0.25rem;
 
-  /* borders computed */
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border:  hsl(from hsl(var(--sidebar-accent))  h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --primary-border:         hsl(from hsl(var(--primary))          h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -160,56 +165,51 @@
   body {
     font-family: var(--app-font-sans);
     @apply antialiased bg-background text-foreground;
-    letter-spacing: -0.011em;
+    letter-spacing: -0.012em;
   }
   button { cursor: pointer; }
 
   [data-radix-popper-content-wrapper] [data-slot="popover-content"] {
-    box-shadow: 0 8px 24px -4px rgb(0 0 0 / .14), 0 2px 6px -2px rgb(0 0 0 / .06);
+    box-shadow: 0 8px 24px -4px rgb(0 0 0 / .12), 0 2px 6px -2px rgb(0 0 0 / .05);
     border: 1px solid hsl(var(--border));
+    border-radius: 10px;
   }
 }
 
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button { @apply hidden; }
 
-  /* ── Status badges ── */
-  .status-healthy   { color: #16a34a; background: rgb(22 163 74  / .10); }
+  /* ── Status utilities ── */
+  .status-healthy   { color: #0d9488; background: rgb(13 148 136 / .10); }
   .status-warning   { color: #d97706; background: rgb(217 119 6  / .10); }
   .status-unhealthy { color: #dc2626; background: rgb(220 38  38 / .10); }
 
-  /* ── ABC curve labels ── */
-  .curve-a { color: #16a34a; font-weight: 700; }
+  .curve-a { color: #0d9488; font-weight: 700; }
   .curve-b { color: #d97706; font-weight: 600; }
   .curve-c { color: #9ca3af; font-weight: 500; }
 
-  /* ── Severity rows ── */
-  .severity-red    { background: rgb(220 38  38 / .06); color: #b91c1c; border-color: rgb(220 38  38 / .18); }
-  .severity-yellow { background: rgb(217 119  6 / .06); color: #b45309; border-color: rgb(217 119  6 / .20); }
-  .severity-green  { background: rgb(22  163 74 / .06); color: #15803d; border-color: rgb(22  163 74 / .18); }
+  .severity-red    { background: rgb(220 38  38 / .07); color: #b91c1c; border-color: rgb(220 38  38 / .15); }
+  .severity-yellow { background: rgb(217 119  6 / .07); color: #b45309; border-color: rgb(217 119  6 / .18); }
+  .severity-green  { background: rgb(13  148 136 / .07); color: #0f766e; border-color: rgb(13 148 136 / .15); }
 
-  /* ── Card with real shadow ── */
+  /* ── Card ── */
   .card-base {
-    background: hsl(var(--card));
+    background: white;
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
     box-shadow: var(--shadow-sm);
   }
-
-  /* ── Hover lift ── */
   .card-hover {
-    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .card-hover:hover {
     box-shadow: var(--shadow-md);
-    border-color: hsl(var(--primary) / .4);
-    transform: translateY(-1px);
+    border-color: hsl(var(--primary) / .35);
   }
 
-  /* ── Table row hover ── */
-  .table-row-hover:hover {
-    background: hsl(var(--muted) / .7);
-  }
+  /* ── Pill badge for KPI trend ── */
+  .trend-up   { background: rgb(13 148 136 / .10); color: #0d9488; }
+  .trend-down { background: rgb(220 38 38 / .10);  color: #dc2626; }
 }
 
 @media print {

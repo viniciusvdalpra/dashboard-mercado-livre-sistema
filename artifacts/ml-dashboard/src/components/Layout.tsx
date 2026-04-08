@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Activity, Package, Megaphone,
-  Truck, Wrench, Tags, LogOut, ShoppingBag, Bell, ChevronDown,
+  Truck, Wrench, Tags, LogOut, Settings, HelpCircle,
+  Bell, Search, ChevronDown, Store,
 } from "lucide-react";
 import { useGlobalContext } from "@/contexts/GlobalContext";
 import { ACCOUNTS } from "@/mock/data";
@@ -9,45 +10,35 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-const NAV_ITEMS = [
-  { path: "/",          label: "Dashboard",           icon: LayoutDashboard, section: null },
-  { path: "/saude",     label: "Saúde dos Anúncios",  icon: Activity,        section: "Anúncios" },
-  { path: "/estoque",   label: "Estoque",             icon: Package,         section: null },
-  { path: "/ads",       label: "Ads",                 icon: Megaphone,       section: null },
-  { path: "/frete",     label: "Frete",               icon: Truck,           section: null },
-  { path: "/correcoes", label: "Correções",            icon: Wrench,          section: "Automação" },
-  { path: "/precos",    label: "Preços",              icon: Tags,            section: null },
+const NAV_MAIN = [
+  { path: "/",          label: "Dashboard",          icon: LayoutDashboard },
+  { path: "/saude",     label: "Saúde dos Anúncios", icon: Activity },
+  { path: "/estoque",   label: "Estoque",            icon: Package },
+  { path: "/ads",       label: "Ads",                icon: Megaphone },
+  { path: "/frete",     label: "Frete",              icon: Truck },
+  { path: "/correcoes", label: "Correções",           icon: Wrench },
+  { path: "/precos",    label: "Preços",             icon: Tags },
 ];
 
-function SidebarLink({
-  item, isActive,
-}: {
-  item: typeof NAV_ITEMS[0];
-  isActive: boolean;
+function NavItem({ path, label, icon: Icon, active }: {
+  path: string; label: string; icon: React.ElementType; active: boolean;
 }) {
   return (
     <Link
-      href={item.path}
-      className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-        isActive
-          ? "bg-white/10 text-white"
-          : "text-sidebar-foreground hover:bg-white/5 hover:text-white"
+      href={path}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+        active
+          ? "text-white shadow-sm"
+          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
       }`}
-      data-testid={`nav-${item.path}`}
+      style={active ? {
+        background: "linear-gradient(135deg, hsl(174 55% 26%) 0%, hsl(174 65% 32%) 100%)",
+        boxShadow: "0 4px 12px hsl(174 72% 36% / .3)",
+      } : {}}
+      data-testid={`nav-${path}`}
     >
-      <div
-        className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
-          isActive
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "bg-white/5 text-sidebar-foreground group-hover:bg-white/10 group-hover:text-white"
-        }`}
-      >
-        <item.icon className="h-4 w-4" />
-      </div>
-      {item.label}
-      {isActive && (
-        <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
-      )}
+      <Icon className={`h-4 w-4 flex-shrink-0 ${active ? "text-white" : ""}`} />
+      {label}
     </Link>
   );
 }
@@ -59,136 +50,142 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isActive = (path: string) =>
     path === "/" ? location === "/" : location.startsWith(path);
 
-  const currentPage = NAV_ITEMS.find(i => isActive(i.path));
-
-  const sections: { label: string | null; items: typeof NAV_ITEMS }[] = [
-    { label: null, items: NAV_ITEMS.filter(i => !i.section || i.section === "Anúncios").slice(0, 2) },
-    { label: null, items: NAV_ITEMS.slice(2, 5) },
-    { label: "Automação", items: NAV_ITEMS.slice(5) },
-  ];
+  const currentPage = location.startsWith("/saude/")
+    ? "Detalhe do Anúncio"
+    : NAV_MAIN.find(i => isActive(i.path))?.label ?? "";
 
   return (
-    <div className="flex min-h-screen w-full bg-background font-sans">
+    <div className="flex min-h-screen bg-background font-sans">
 
       {/* ── Sidebar ── */}
       <aside
-        className="fixed left-0 top-0 z-40 h-screen w-60 flex flex-col"
+        className="fixed left-0 top-0 z-40 h-screen w-58 flex flex-col bg-sidebar"
         style={{
-          background: "hsl(222 20% 9%)",
-          borderRight: "1px solid hsl(222 15% 14%)",
+          width: 224,
+          borderRight: "1px solid hsl(var(--sidebar-border))",
+          boxShadow: "1px 0 0 hsl(var(--sidebar-border))",
         }}
       >
         {/* Logo */}
         <div
-          className="flex items-center gap-3 h-16 px-5 flex-shrink-0"
-          style={{ borderBottom: "1px solid hsl(222 15% 14%)" }}
+          className="flex items-center gap-2.5 h-16 px-5"
+          style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
         >
           <div
             className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: "hsl(43 75% 48%)" }}
+            style={{
+              background: "linear-gradient(135deg, hsl(174 55% 26%) 0%, hsl(174 65% 36%) 100%)",
+            }}
           >
-            <ShoppingBag className="h-4 w-4 text-black" />
+            <Store className="h-4 w-4 text-white" />
           </div>
-          <div>
-            <div className="text-white font-bold text-sm tracking-tight leading-none">ML Gestão</div>
-            <div className="text-[10px] mt-0.5" style={{ color: "hsl(220 15% 42%)" }}>Painel de Controle</div>
+          <span className="font-bold text-base text-foreground tracking-tight">ML Gestão</span>
+        </div>
+
+        {/* Active context pill */}
+        <div className="px-3 pt-4 pb-2">
+          <div
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{
+              background: "linear-gradient(135deg, hsl(174 55% 26%) 0%, hsl(174 65% 32%) 100%)",
+              boxShadow: "0 4px 12px hsl(174 72% 36% / .25)",
+            }}
+          >
+            <Store className="h-4 w-4 text-teal-200 flex-shrink-0" />
+            <span className="flex-1 truncate">Mercado Livre</span>
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-          {/* First group */}
-          <div className="mb-1">
-            <SidebarLink item={NAV_ITEMS[0]} isActive={isActive(NAV_ITEMS[0].path)} />
+        {/* Main nav */}
+        <nav className="flex-1 overflow-y-auto px-3 py-1 space-y-0.5">
+          <div className="py-1">
+            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+              Principal
+            </p>
+            {NAV_MAIN.slice(0, 1).map(item => (
+              <NavItem key={item.path} {...item} active={isActive(item.path)} />
+            ))}
           </div>
 
-          <div
-            className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-widest"
-            style={{ color: "hsl(220 15% 35%)" }}
-          >
-            Anúncios
+          <div className="py-1">
+            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+              Anúncios
+            </p>
+            {NAV_MAIN.slice(1, 5).map(item => (
+              <NavItem key={item.path} {...item} active={isActive(item.path)} />
+            ))}
           </div>
-          {NAV_ITEMS.slice(1, 5).map(item => (
-            <SidebarLink key={item.path} item={item} isActive={isActive(item.path)} />
-          ))}
 
-          <div
-            className="px-3 pt-5 pb-1.5 text-[10px] font-semibold uppercase tracking-widest"
-            style={{ color: "hsl(220 15% 35%)" }}
-          >
-            Automação
+          <div className="py-1">
+            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+              Automação
+            </p>
+            {NAV_MAIN.slice(5).map(item => (
+              <NavItem key={item.path} {...item} active={isActive(item.path)} />
+            ))}
           </div>
-          {NAV_ITEMS.slice(5).map(item => (
-            <SidebarLink key={item.path} item={item} isActive={isActive(item.path)} />
-          ))}
         </nav>
 
-        {/* Bottom: account indicator + logout */}
+        {/* Bottom */}
         <div
-          className="flex-shrink-0 px-3 pb-4 pt-3 space-y-1"
-          style={{ borderTop: "1px solid hsl(222 15% 14%)" }}
+          className="px-3 py-4 space-y-0.5"
+          style={{ borderTop: "1px solid hsl(var(--sidebar-border))" }}
         >
-          <div
-            className="flex items-center gap-3 px-3 py-2 rounded-lg"
-            style={{ background: "hsl(222 15% 13%)" }}
-          >
-            <div className="h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ background: "hsl(43 75% 48%)", color: "hsl(222 20% 9%)" }}>
-              ML
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white truncate">Operador</div>
-              <div className="text-[10px] truncate" style={{ color: "hsl(220 15% 42%)" }}>admin@empresa.com</div>
-            </div>
-          </div>
+          <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors">
+            <HelpCircle className="h-4 w-4" />
+            Ajuda
+          </button>
           <button
             onClick={() => setIsLoggedIn(false)}
-            className="flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-colors hover:bg-white/5"
-            style={{ color: "hsl(220 15% 50%)" }}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-red-50 hover:text-red-600 transition-colors"
             data-testid="btn-logout"
           >
             <LogOut className="h-4 w-4" />
-            Sair
+            Sair da conta
           </button>
         </div>
       </aside>
 
       {/* ── Main area ── */}
-      <div className="pl-60 flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0" style={{ paddingLeft: 224 }}>
 
-        {/* Header */}
+        {/* Top header */}
         <header
-          className="sticky top-0 z-30 h-16 flex items-center justify-between px-8"
-          style={{
-            background: "hsl(var(--background) / .95)",
-            backdropFilter: "blur(12px)",
-            borderBottom: "1px solid hsl(var(--border))",
-            boxShadow: "0 1px 0 hsl(var(--border))",
-          }}
+          className="sticky top-0 z-30 h-16 flex items-center justify-between px-7 bg-white"
+          style={{ borderBottom: "1px solid hsl(var(--border))", boxShadow: "0 1px 3px rgb(0 0 0 / .05)" }}
         >
-          {/* Breadcrumb-style title */}
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground font-medium">Painel</span>
-            <span className="text-muted-foreground/50">/</span>
-            <span className="font-semibold text-foreground">
-              {location.startsWith("/saude/")
-                ? "Detalhe do Anúncio"
-                : currentPage?.label || "Página"}
-            </span>
+          {/* Left: title */}
+          <div>
+            <h1 className="text-lg font-bold text-foreground tracking-tight">{currentPage}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Atualizado em {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+            </p>
           </div>
 
-          {/* Right: account selector + bell */}
+          {/* Right controls */}
           <div className="flex items-center gap-3">
-            <button className="relative h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card hover:bg-muted transition-colors">
+            {/* Search */}
+            <div className="relative hidden md:flex items-center">
+              <Search className="absolute left-3 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                placeholder="Buscar..."
+                className="h-9 pl-9 pr-4 text-sm rounded-lg border border-border bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary w-48 transition-all focus:w-64"
+              />
+            </div>
+
+            {/* Bell */}
+            <button className="relative h-9 w-9 flex items-center justify-center rounded-lg border border-border bg-white hover:bg-muted transition-colors">
               <Bell className="h-4 w-4 text-muted-foreground" />
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500" />
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
             </button>
 
+            {/* Account selector */}
             <Select
               value={selectedAccountId === null ? "all" : selectedAccountId.toString()}
               onValueChange={v => setSelectedAccountId(v === "all" ? null : Number(v))}
             >
               <SelectTrigger
-                className="h-9 w-[185px] bg-card border-border text-sm font-medium"
+                className="h-9 w-[180px] bg-white border-border text-sm font-medium"
                 data-testid="select-account"
               >
                 <SelectValue placeholder="Todas as contas" />
@@ -202,11 +199,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Avatar */}
+            <div className="flex items-center gap-2 pl-1">
+              <div
+                className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, hsl(174 55% 26%) 0%, hsl(174 65% 36%) 100%)" }}
+              >
+                OP
+              </div>
+              <div className="hidden md:block text-right">
+                <div className="text-xs font-semibold text-foreground leading-tight">Operador</div>
+                <div className="text-[10px] text-muted-foreground leading-tight">Admin</div>
+              </div>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground hidden md:block" />
+            </div>
           </div>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 p-8 overflow-x-hidden">
+        {/* Page content */}
+        <main className="flex-1 p-7 overflow-x-hidden">
           {children}
         </main>
       </div>
