@@ -1,221 +1,182 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/GlobalContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FREIGHT_ITEMS, FREIGHT_BY_STATE } from "@/mock/data";
+import { FREIGHT_ITEMS } from "@/mock/data";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { Truck, DollarSign, Percent, TrendingUp } from "lucide-react";
+import { Truck, DollarSign, Package, AlertTriangle, Download } from "lucide-react";
 
-type FreightFilter = "all" | "free_lt79" | "gt15pct" | "rose20" | "free" | "nofree";
+const THRESHOLDS = { ok: 10, warn: 18 };
 
-const QUICK_FILTERS: { key: FreightFilter; label: string }[] = [
-  { key: "all", label: "Todos" },
-  { key: "free_lt79", label: "Grátis < R$79" },
-  { key: "gt15pct", label: "> 15% do preço" },
-  { key: "rose20", label: "Custo subiu > 20%" },
-  { key: "free", label: "Com frete grátis" },
-  { key: "nofree", label: "Sem frete grátis" },
+type FreightFilter = "all" | "ok" | "warn" | "danger" | "free";
+
+const FILTERS: { key: FreightFilter; label: string }[] = [
+  { key: "all",    label: "Todos" },
+  { key: "ok",     label: "OK (≤10%)" },
+  { key: "warn",   label: "Atenção (10–18%)" },
+  { key: "danger", label: "Crítico (>18%)" },
+  { key: "free",   label: "Frete grátis" },
 ];
 
-const MODE_LABELS: Record<string, string> = {
-  fulfillment: "Full",
-  xd_drop_off: "Flex",
-  cross_docking: "Agência",
-};
+function freightBadge(pct: number, isFree: boolean) {
+  if (isFree)                    return "bg-teal-50 text-teal-700 border border-teal-200";
+  if (pct > THRESHOLDS.warn)     return "bg-red-50 text-red-700 border border-red-200";
+  if (pct > THRESHOLDS.ok)       return "bg-amber-50 text-amber-700 border border-amber-200";
+  return "bg-muted text-muted-foreground border border-border";
+}
 
 export default function Frete() {
   const { selectedAccountId } = useGlobalContext();
   const [activeFilter, setActiveFilter] = useState<FreightFilter>("all");
 
+  const base = useMemo(() =>
+    selectedAccountId ? FREIGHT_ITEMS.filter(i => i.accountId === selectedAccountId) : FREIGHT_ITEMS,
+    [selectedAccountId]
+  );
+
+  const counts = useMemo(() => ({
+    all:    base.length,
+    ok:     base.filter(i => !i.freeShipping && i.freightPercent <= THRESHOLDS.ok).length,
+    warn:   base.filter(i => i.freightPercent > THRESHOLDS.ok && i.freightPercent <= THRESHOLDS.warn).length,
+    danger: base.filter(i => i.freightPercent > THRESHOLDS.warn).length,
+    free:   base.filter(i => i.freeShipping).length,
+  }), [base]);
+
   const items = useMemo(() => {
-    let list = selectedAccountId
-      ? FREIGHT_ITEMS.filter(i => i.accountId === selectedAccountId)
-      : FREIGHT_ITEMS;
-
     switch (activeFilter) {
-      case "free_lt79": return list.filter(i => i.freeShipping && i.price < 79);
-      case "gt15pct": return list.filter(i => i.freightPercent > 15);
-      case "rose20": return list.filter(i => i.freightChanged && i.freightChangePct > 20);
-      case "free": return list.filter(i => i.freeShipping);
-      case "nofree": return list.filter(i => !i.freeShipping);
-      default: return list;
+      case "ok":     return base.filter(i => !i.freeShipping && i.freightPercent <= THRESHOLDS.ok);
+      case "warn":   return base.filter(i => i.freightPercent > THRESHOLDS.ok && i.freightPercent <= THRESHOLDS.warn);
+      case "danger": return base.filter(i => i.freightPercent > THRESHOLDS.warn);
+      case "free":   return base.filter(i => i.freeShipping);
+      default:       return base;
     }
-  }, [selectedAccountId, activeFilter]);
+  }, [base, activeFilter]);
 
-  const allItems = selectedAccountId ? FREIGHT_ITEMS.filter(i => i.accountId === selectedAccountId) : FREIGHT_ITEMS;
+  const totalCost  = base.reduce((s, i) => s + i.freightCost, 0);
+  const avgPct     = base.length ? base.reduce((s, i) => s + i.freightPercent, 0) / base.length : 0;
+  const freeCount  = base.filter(i => i.freeShipping).length;
 
-  const totalRevenue = allItems.reduce((s, i) => s + i.revenue30d, 0);
-  const totalFreight = allItems.reduce((s, i) => s + i.freightCost, 0);
-  const avgFreight = allItems.length > 0 ? totalFreight / allItems.length : 0;
-  const freightPct = totalRevenue > 0 ? (totalFreight / totalRevenue) * 100 : 0;
-
-  const stateData = FREIGHT_BY_STATE.sort((a, b) => b.sales - a.sales);
+  const accountChart = useMemo(() => {
+    const map: Record<string, { name: string; total: number; count: number }> = {};
+    base.forEach(i => {
+      const k = String(i.accountId);
+      if (!map[k]) map[k] = { name: i.accountName.split(" ")[1] ?? i.accountName, total: 0, count: 0 };
+      map[k].total += i.freightPercent;
+      map[k].count += 1;
+    });
+    return Object.values(map).map(v => ({
+      name: v.name,
+      ratio: +(v.count > 0 ? v.total / v.count : 0).toFixed(1),
+    }));
+  }, [base]);
 
   return (
     <Layout>
-      {/* KPIs */}
+      <PageHeader
+        title="Frete"
+        subtitle="Custo de frete por anúncio e incidência sobre vendas"
+        actions={[{ label: "Exportar", icon: <Download className="h-4 w-4" />, variant: "outline" }]}
+      />
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Faturamento (30d)"
-          value={totalRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          icon={<DollarSign className="h-4 w-4" />}
-        />
-        <KpiCard
-          label="Custo frete total"
-          value={totalFreight.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+        <KpiCard accent label="Custo total de frete"
+          value={totalCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
           icon={<Truck className="h-4 w-4" />}
         />
-        <KpiCard
-          label="% sobre vendas"
-          value={`${freightPct.toFixed(1)}%`}
-          icon={<Percent className="h-4 w-4" />}
-        />
-        <KpiCard
-          label="Frete médio/pedido"
-          value={avgFreight.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          icon={<TrendingUp className="h-4 w-4" />}
-        />
+        <KpiCard label="Incidência média" value={`${avgPct.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} trend={{ value: 1.3, isPositive: false }} />
+        <KpiCard label="Itens críticos (>18%)" value={counts.danger} icon={<AlertTriangle className="h-4 w-4" />} />
+        <KpiCard label="Frete grátis" value={`${freeCount} itens`} icon={<Package className="h-4 w-4" />} />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
-        {/* By state */}
-        <Card>
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="text-base">Vendas por UF — Custo médio de frete</CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={stateData} margin={{ left: 0, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                <XAxis dataKey="state" tick={{ fontSize: 11, fill: "#9CA3AF" }} stroke="transparent" />
-                <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} stroke="transparent" />
-                <Tooltip
-                  contentStyle={{ fontSize: 11, borderRadius: 6 }}
-                  formatter={(v: number, name: string) => [
-                    name === "sales" ? v : `R$ ${v.toFixed(2)}`,
-                    name === "sales" ? "Vendas" : "Frete médio"
-                  ]}
-                />
-                <Bar dataKey="sales" fill="#565845" radius={[4, 4, 0, 0]} isAnimationActive={false} name="Vendas" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
+        <div className="xl:col-span-2 bg-white rounded-2xl border border-border p-6" style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
+          <h3 className="font-bold text-sm text-foreground mb-4">Incidência por Conta (%)</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={accountChart} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" />
+              <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} stroke="transparent" tickFormatter={v => `${v}%`} />
+              <Tooltip
+                contentStyle={{ background: "white", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                formatter={(v: number) => [`${v}%`, "Incidência"]}
+              />
+              <Bar dataKey="ratio" fill="hsl(174, 72%, 36%)" radius={[6, 6, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-        {/* Freight pct by state */}
-        <Card>
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="text-base">% Frete sobre Vendas por UF</CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5">
-            <div className="space-y-3">
-              {stateData.map(s => (
-                <div key={s.state} className="flex items-center gap-3">
-                  <span className="w-8 text-xs font-semibold text-muted-foreground">{s.state}</span>
-                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${s.freightPct > 15 ? "bg-red-500" : s.freightPct > 12 ? "bg-amber-500" : "bg-green-500"}`}
-                      style={{ width: `${Math.min(100, (s.freightPct / 20) * 100)}%` }}
-                    />
-                  </div>
-                  <span className={`text-xs font-semibold w-12 text-right ${s.freightPct > 15 ? "text-red-600" : s.freightPct > 12 ? "text-amber-600" : "text-green-600"}`}>
-                    {s.freightPct.toFixed(1)}%
-                  </span>
-                  <span className="text-xs text-muted-foreground w-20 text-right">
-                    R$ {s.avgFreight.toFixed(2)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-2xl border border-border p-5" style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
+          <h3 className="font-bold text-sm text-foreground mb-3">Filtrar situação</h3>
+          <div className="space-y-1.5">
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => setActiveFilter(f.key)}
+                className={`flex items-center justify-between w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  activeFilter === f.key ? "text-white shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                style={activeFilter === f.key ? { background: "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 34%))" } : {}}
+                data-testid={`filter-${f.key}`}
+              >
+                <span>{f.label}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${activeFilter === f.key ? "bg-white/20 text-white" : "bg-muted"}`}>
+                  {counts[f.key as keyof typeof counts] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Quick filters */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {QUICK_FILTERS.map(f => (
-          <button
-            key={f.key}
-            onClick={() => setActiveFilter(f.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              activeFilter === f.key
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-foreground border-border hover:bg-muted"
-            }`}
-            data-testid={`filter-${f.key}`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-5 py-3 text-left font-semibold text-muted-foreground">Anúncio</th>
-                  <th className="px-5 py-3 text-right font-semibold text-muted-foreground w-24">Preço</th>
-                  <th className="px-5 py-3 text-right font-semibold text-muted-foreground w-28">Custo frete</th>
-                  <th className="px-5 py-3 text-right font-semibold text-muted-foreground w-24">% Preço</th>
-                  <th className="px-5 py-3 text-center font-semibold text-muted-foreground w-24">Envio</th>
-                  <th className="px-5 py-3 text-center font-semibold text-muted-foreground w-28">Frete grátis</th>
-                  <th className="px-5 py-3 text-right font-semibold text-muted-foreground w-24">Variação</th>
+      <div className="bg-white rounded-2xl border border-border overflow-hidden" style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: "hsl(var(--muted))", borderBottom: "1px solid hsl(var(--border))" }}>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Anúncio</th>
+                <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Preço</th>
+                <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Frete</th>
+                <th className="px-5 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Incidência</th>
+                <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Unidades</th>
+                <th className="px-5 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Tipo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map(item => (
+                <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <div className="font-semibold text-foreground truncate max-w-[280px]">{item.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{item.id} · {item.accountName.split(" ")[1]}</div>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">{item.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                  <td className="px-5 py-3.5 text-right">{item.freightCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                  <td className="px-5 py-3.5 text-center">
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${freightBadge(item.freightPercent, item.freeShipping)}`}>
+                      {item.freeShipping ? "Grátis" : `${item.freightPercent}%`}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">{item.sales30d}</td>
+                  <td className="px-5 py-3.5 text-center">
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${
+                      item.shippingMode === "fulfillment"
+                        ? "bg-teal-50 text-teal-700 border border-teal-200"
+                        : "bg-muted text-muted-foreground border border-border"
+                    }`}>
+                      {item.shippingMode}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map(item => (
-                  <tr key={item.id} className="border-b border-border hover:bg-muted/20 transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-foreground truncate max-w-[280px]">{item.title}</div>
-                      <div className="text-xs text-muted-foreground">{item.id}</div>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      {item.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    </td>
-                    <td className="px-5 py-3 text-right font-semibold">
-                      {item.freightCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className={`text-xs font-semibold ${item.freightPercent > 15 ? "text-red-600" : item.freightPercent > 12 ? "text-amber-600" : "text-green-600"}`}>
-                        {item.freightPercent}%
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <span className="text-xs text-muted-foreground">{MODE_LABELS[item.shippingMode] || item.shippingMode}</span>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      {item.freeShipping ? (
-                        <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-medium">Grátis</span>
-                      ) : (
-                        <span className="text-xs bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-full">Pago</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      {item.freightChanged ? (
-                        <span className={`text-xs font-semibold ${item.freightChangePct > 0 ? "text-red-600" : "text-green-600"}`}>
-                          {item.freightChangePct > 0 ? "+" : ""}{item.freightChangePct}%
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-border text-xs text-muted-foreground">
-            {items.length} item(ns) exibido(s)
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-border bg-muted/30 text-xs text-muted-foreground">
+          {items.length} item(ns) exibido(s)
+        </div>
+      </div>
     </Layout>
   );
 }

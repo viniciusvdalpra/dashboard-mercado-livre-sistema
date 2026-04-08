@@ -280,11 +280,17 @@ export const CORRECTIONS = Array.from({ length: 45 }, (_, i) => {
 export const PRICE_ITEMS = ITEMS.slice(0, 50).map(item => {
   const hasNotMarketPrice = Math.random() > 0.85;
   const gap = Math.round((Math.random() * 30 - 5) * 10) / 10;
+  const minPrice = Math.round(item.price * 0.85);
+  const maxPrice = Math.round(item.price * 1.20);
+  const competitors = Math.floor(Math.random() * 15);
   return {
     ...item,
     suggestedPrice: Math.round(item.price * (1 - gap / 100)),
     gap,
     hasNotMarketPrice,
+    minPrice,
+    maxPrice,
+    competitors,
     suggestionStatus: gap > 15 ? "above_suggestion" : gap < 0 ? "below_suggestion" : "competitive",
     priceHistory: Array.from({ length: 30 }, (_, i) => ({
       date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
