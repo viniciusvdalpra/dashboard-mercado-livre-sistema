@@ -383,16 +383,18 @@ export default function DashboardGeral() {
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
         >
           <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
-          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1 scrollbar-thin">
-            {PROBLEMS.map((p, i) => (
-              <div
-                key={i}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${SEVERITY_STYLES[p.severity]}`}
-              >
-                <span className="font-medium text-[13px]">{p.label}</span>
-                <span className="font-bold text-[15px]">{p.count}</span>
-              </div>
-            ))}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+              {PROBLEMS.map((p, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${SEVERITY_STYLES[p.severity]}`}
+                >
+                  <span className="font-medium text-[13px]">{p.label}</span>
+                  <span className="font-bold text-[15px]">{p.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
