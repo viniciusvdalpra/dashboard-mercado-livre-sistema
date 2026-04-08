@@ -14,6 +14,7 @@ import Frete from "@/pages/Frete";
 import Correcoes from "@/pages/Correcoes";
 import Precos from "@/pages/Precos";
 import Compatibilidade from "@/pages/Compatibilidade";
+import Lucratividade from "@/pages/Lucratividade";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +47,7 @@ function ProtectedRouter() {
       <Route path="/correcoes" component={Correcoes} />
       <Route path="/precos" component={Precos} />
       <Route path="/compatibilidade" component={Compatibilidade} />
+      <Route path="/lucratividade" component={Lucratividade} />
       <Route path="/login">
         <Redirect to="/" />
       </Route>

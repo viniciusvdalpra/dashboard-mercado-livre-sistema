@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Activity, Package, Megaphone,
   Truck, Wrench, Tags, LogOut, Settings, HelpCircle,
-  Bell, ChevronDown, Store, Link2,
+  Bell, ChevronDown, Store, Link2, TrendingUp,
 } from "lucide-react";
 import { useGlobalContext } from "@/contexts/GlobalContext";
 import { ACCOUNTS } from "@/mock/data";
@@ -19,6 +19,7 @@ const NAV_MAIN = [
   { path: "/correcoes",      label: "Correções",          icon: Wrench },
   { path: "/precos",         label: "Preços",             icon: Tags },
   { path: "/compatibilidade",label: "Vínculos em Massa",  icon: Link2 },
+  { path: "/lucratividade",  label: "Lucratividade",      icon: TrendingUp },
 ];
 
 function NavItem({ path, label, icon: Icon, active }: {

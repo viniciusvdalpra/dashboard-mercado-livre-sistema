@@ -452,3 +452,108 @@ export const COMPAT_ITEMS = ITEMS.map((item, i) => ({
   compatCount: item.compatStatus === "complete" ? Math.round(3 + Math.random() * 12) : 0,
   needsCompat: item.compatStatus !== "complete",
 }));
+
+// ── Lucratividade por Venda ───────────────────────────────────────────────────
+
+function sf(seed: number, min: number, max: number) {
+  const x = Math.sin(seed * 9301 + 49297) * 233280;
+  return min + (x - Math.floor(x)) * (max - min);
+}
+
+const PROFIT_PRODUCTS = [
+  { title: "Amortecedor Monroe Dianteiro",  sku: "AMO-MON-D", unitPrice: 289.90, unitCost: 128.00, mlCommRate: 0.12, weight: 2.4 },
+  { title: "Filtro de Óleo Mann W712",       sku: "FIL-MAN-W", unitPrice: 44.90,  unitCost: 17.50,  mlCommRate: 0.12, weight: 0.3 },
+  { title: "Correia Dentada Gates K016",     sku: "COR-GAT-K", unitPrice: 118.50, unitCost: 51.00,  mlCommRate: 0.12, weight: 0.5 },
+  { title: "Vela Iridium NGK LKR7AIX",      sku: "VEL-NGK-L", unitPrice: 52.90,  unitCost: 22.00,  mlCommRate: 0.14, weight: 0.1 },
+  { title: "Pastilha de Freio Bosch BB0990", sku: "PAS-BOS-B", unitPrice: 94.90,  unitCost: 38.00,  mlCommRate: 0.12, weight: 0.8 },
+  { title: "Kit Embreagem Dayco KDC1422",    sku: "KIT-DAY-K", unitPrice: 418.00, unitCost: 195.00, mlCommRate: 0.12, weight: 4.2 },
+  { title: "Tensor Correia Bosch 1987946318",sku: "TEN-BOS-1", unitPrice: 79.90,  unitCost: 33.00,  mlCommRate: 0.12, weight: 0.4 },
+  { title: "Bomba D'água Gates WP0101",      sku: "BOM-GAT-W", unitPrice: 142.90, unitCost: 64.00,  mlCommRate: 0.12, weight: 1.1 },
+];
+
+const TAX_RATE = 0.0654; // Simples Nacional - faixa 3
+
+export interface SaleProfitability {
+  id: string;
+  date: string;
+  title: string;
+  sku: string;
+  accountId: number;
+  accountName: string;
+  qty: number;
+  unitPrice: number;
+  revenue: number;
+  mlCommissionRate: number;
+  mlCommission: number;
+  shippingCost: number;
+  adsCost: number;
+  taxRate: number;
+  taxAmount: number;
+  unitCost: number;
+  cmv: number;
+  packagingCost: number;
+  totalDeductions: number;
+  totalCosts: number;
+  grossProfit: number;
+  grossMargin: number;
+  netProfit: number;
+  netMargin: number;
+}
+
+export const SALES_PROFITABILITY: SaleProfitability[] = Array.from({ length: 80 }, (_, i) => {
+  const prod = PROFIT_PRODUCTS[i % PROFIT_PRODUCTS.length];
+  const accountId = (i % 4) + 1;
+  const accountName = ACCOUNTS[accountId - 1].name;
+  const daysAgo = Math.floor(sf(i * 3, 0, 30));
+  const d = new Date(2026, 3, 8);
+  d.setDate(d.getDate() - daysAgo);
+  const date = d.toLocaleDateString("pt-BR");
+  const qty = i % 7 === 0 ? 2 : 1;
+
+  const priceVariance = 1 + sf(i * 7, -0.05, 0.08);
+  const unitPrice = Math.round(prod.unitPrice * priceVariance * 100) / 100;
+  const revenue = Math.round(unitPrice * qty * 100) / 100;
+
+  const mlCommission = Math.round(revenue * prod.mlCommRate * 100) / 100;
+  const shippingCost = Math.round(sf(i * 11, 8, prod.weight * 8 + 6) * 100) / 100;
+  const adsCost = i % 5 === 0 ? 0 : Math.round(revenue * sf(i * 13, 0.03, 0.07) * 100) / 100;
+  const taxAmount = Math.round(revenue * TAX_RATE * 100) / 100;
+  const packagingCost = Math.round(sf(i * 17, 3, 7) * 100) / 100;
+
+  const unitCost = Math.round(prod.unitCost * (1 + sf(i * 5, -0.03, 0.06)) * 100) / 100;
+  const cmv = Math.round(unitCost * qty * 100) / 100;
+
+  const totalDeductions = Math.round((mlCommission + shippingCost + adsCost + taxAmount + packagingCost) * 100) / 100;
+  const totalCosts = Math.round((totalDeductions + cmv) * 100) / 100;
+  const grossProfit = Math.round((revenue - cmv) * 100) / 100;
+  const grossMargin = Math.round((grossProfit / revenue) * 10000) / 100;
+  const netProfit = Math.round((revenue - totalCosts) * 100) / 100;
+  const netMargin = Math.round((netProfit / revenue) * 10000) / 100;
+
+  return {
+    id: `ML${2025000100 + i}`,
+    date,
+    title: prod.title,
+    sku: prod.sku,
+    accountId,
+    accountName,
+    qty,
+    unitPrice,
+    revenue,
+    mlCommissionRate: prod.mlCommRate,
+    mlCommission,
+    shippingCost,
+    adsCost,
+    taxRate: TAX_RATE,
+    taxAmount,
+    unitCost,
+    cmv,
+    packagingCost,
+    totalDeductions,
+    totalCosts,
+    grossProfit,
+    grossMargin,
+    netProfit,
+    netMargin,
+  };
+});
