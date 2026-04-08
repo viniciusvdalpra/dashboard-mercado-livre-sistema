@@ -203,7 +203,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
 
   return (
     <div
-      className="bg-white rounded-2xl p-6 border border-border"
+      className="bg-white rounded-2xl p-6 border border-border h-full flex flex-col"
       style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
     >
       {/* Header */}
@@ -257,7 +257,8 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
       {/* Chart */}
       {singleLine ? (
         // Single account — AreaChart com preenchimento
-        <ResponsiveContainer width="100%" height={220}>
+        <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={sliced} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
             <defs>
               <linearGradient id="singleGrad" x1="0" y1="0" x2="0" y2="1">
@@ -281,9 +282,11 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
             />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       ) : (
         // Todas as contas — LineChart com 5 linhas (4 contas + total)
-        <ResponsiveContainer width="100%" height={220}>
+        <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={sliced} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
             <XAxis dataKey="date" tick={axisStyle} stroke="transparent" interval={xInterval} />
@@ -314,6 +317,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
             />
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );
@@ -372,16 +376,16 @@ export default function DashboardGeral() {
       </div>
 
       {/* ── Chart + Problems ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
-        <div className="xl:col-span-2">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6" style={{ height: 400 }}>
+        <div className="xl:col-span-2 h-full">
           <SalesChart data={DAILY_SALES} />
         </div>
         <div
-          className="bg-white rounded-2xl p-5 border border-border"
+          className="bg-white rounded-2xl p-5 border border-border flex flex-col h-full min-h-0"
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
         >
-          <h3 className="font-bold text-sm text-foreground mb-4">Problemas Ativos</h3>
-          <div className="space-y-2">
+          <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-0.5">
             {PROBLEMS.map((p, i) => (
               <div
                 key={i}
