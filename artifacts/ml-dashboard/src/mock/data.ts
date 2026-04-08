@@ -213,6 +213,56 @@ export const STOCK_ITEMS = ITEMS.map(item => ({
   coverageDays: item.stock > 0 && item.sales30d > 0 ? Math.round(item.stock / (item.sales30d / 30)) : 999,
 }));
 
+export type CampaignDiagnosis = "excelente" | "bom" | "regular" | "ruim";
+export type CampaignStatus   = "active" | "paused";
+
+export interface Campaign {
+  id: string;
+  accountId: number;
+  accountName: string;
+  status: CampaignStatus;
+  name: string;
+  diagnosis: CampaignDiagnosis;
+  dailyBudget: number;
+  roasTarget: number;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  roas: number;
+  acos: number;
+  salesProductAds: number;
+  salesNoProductAds: number;
+  revenue: number;
+  cpc: number;
+  winRate: number;
+  lostBudget: number;
+  lostRanking: number;
+  adsCount: number;
+}
+
+export const CAMPAIGNS: Campaign[] = [
+  { id: "C01", accountId: 1, accountName: "Conta Toyo (01)",    status: "active", name: "001 - Curva A 199–299",       diagnosis: "excelente", dailyBudget: 50,  roasTarget: 7,  impressions: 42800, clicks: 1120, cost: 3591,  roas: 4.97,  acos: 20.1, salesProductAds: 12, salesNoProductAds: 31, revenue: 17836,  cpc: 3.21, winRate: 54, lostBudget: 0,  lostRanking: 46, adsCount: 3 },
+  { id: "C02", accountId: 1, accountName: "Conta Toyo (01)",    status: "active", name: "002 - Ticket 399–499",         diagnosis: "bom",      dailyBudget: 50,  roasTarget: 7,  impressions: 31431, clicks: 820,  cost: 2840,  roas: 5.82,  acos: 17.2, salesProductAds: 8,  salesNoProductAds: 18, revenue: 16525,  cpc: 3.46, winRate: 67, lostBudget: 3,  lostRanking: 30, adsCount: 1 },
+  { id: "C03", accountId: 1, accountName: "Conta Toyo (01)",    status: "paused", name: "003 - Reciclagem Curva B",     diagnosis: "regular",  dailyBudget: 20,  roasTarget: 4,  impressions: 12400, clicks: 280,  cost: 860,   roas: 2.14,  acos: 46.7, salesProductAds: 3,  salesNoProductAds: 5,  revenue: 1840,   cpc: 3.07, winRate: 32, lostBudget: 8,  lostRanking: 60, adsCount: 5 },
+  { id: "C04", accountId: 2, accountName: "Conta SAC (02)",     status: "active", name: "SAC - Amortecedores A",        diagnosis: "excelente", dailyBudget: 80,  roasTarget: 8,  impressions: 58200, clicks: 1640, cost: 5200,  roas: 8.43,  acos: 11.9, salesProductAds: 28, salesNoProductAds: 62, revenue: 43852,  cpc: 3.17, winRate: 71, lostBudget: 0,  lostRanking: 29, adsCount: 8 },
+  { id: "C05", accountId: 2, accountName: "Conta SAC (02)",     status: "active", name: "SAC - Filtros Curva B",        diagnosis: "bom",      dailyBudget: 30,  roasTarget: 5,  impressions: 22100, clicks: 590,  cost: 1820,  roas: 3.95,  acos: 25.3, salesProductAds: 9,  salesNoProductAds: 14, revenue: 7191,   cpc: 3.08, winRate: 48, lostBudget: 2,  lostRanking: 50, adsCount: 4 },
+  { id: "C06", accountId: 3, accountName: "Conta Oficial (03)", status: "active", name: "OF - Premium 500+",            diagnosis: "excelente", dailyBudget: 120, roasTarget: 10, impressions: 89400, clicks: 2280, cost: 8960,  roas: 11.20, acos: 8.9,  salesProductAds: 44, salesNoProductAds: 98, revenue: 100352, cpc: 3.93, winRate: 82, lostBudget: 0,  lostRanking: 18, adsCount: 10 },
+  { id: "C07", accountId: 3, accountName: "Conta Oficial (03)", status: "active", name: "OF - Médio 200–499",           diagnosis: "bom",      dailyBudget: 60,  roasTarget: 7,  impressions: 41200, clicks: 1080, cost: 3840,  roas: 6.87,  acos: 14.6, salesProductAds: 19, salesNoProductAds: 42, revenue: 26381,  cpc: 3.56, winRate: 65, lostBudget: 1,  lostRanking: 34, adsCount: 6 },
+  { id: "C08", accountId: 3, accountName: "Conta Oficial (03)", status: "paused", name: "OF - Liquidação Curva C",      diagnosis: "ruim",     dailyBudget: 20,  roasTarget: 3,  impressions: 8200,  clicks: 190,  cost: 940,   roas: 1.12,  acos: 89.3, salesProductAds: 1,  salesNoProductAds: 3,  revenue: 1053,   cpc: 4.95, winRate: 18, lostBudget: 22, lostRanking: 60, adsCount: 2 },
+  { id: "C09", accountId: 4, accountName: "Conta Denzel (04)",  status: "active", name: "DZ - Curva A ROAS 6x",         diagnosis: "bom",      dailyBudget: 40,  roasTarget: 6,  impressions: 28600, clicks: 720,  cost: 2480,  roas: 4.12,  acos: 24.3, salesProductAds: 7,  salesNoProductAds: 19, revenue: 10214,  cpc: 3.44, winRate: 43, lostBudget: 12, lostRanking: 45, adsCount: 4 },
+  { id: "C10", accountId: 4, accountName: "Conta Denzel (04)",  status: "active", name: "DZ - Nova Reciclagem 10x",     diagnosis: "regular",  dailyBudget: 50,  roasTarget: 10, impressions: 19400, clicks: 440,  cost: 1760,  roas: 1.84,  acos: 54.4, salesProductAds: 3,  salesNoProductAds: 5,  revenue: 3238,   cpc: 4.00, winRate: 27, lostBudget: 18, lostRanking: 55, adsCount: 5 },
+  { id: "C11", accountId: 4, accountName: "Conta Denzel (04)",  status: "paused", name: "DZ - Ticket Baixo 99–199",     diagnosis: "ruim",     dailyBudget: 20,  roasTarget: 4,  impressions: 6800,  clicks: 140,  cost: 620,   roas: 0.97,  acos: 103.2, salesProductAds: 1, salesNoProductAds: 2,  revenue: 601,    cpc: 4.43, winRate: 14, lostBudget: 26, lostRanking: 60, adsCount: 1 },
+  { id: "C12", accountId: 2, accountName: "Conta SAC (02)",     status: "active", name: "SAC - Velas e Correias",       diagnosis: "excelente", dailyBudget: 45,  roasTarget: 8,  impressions: 34800, clicks: 980,  cost: 3120,  roas: 9.14,  acos: 10.9, salesProductAds: 18, salesNoProductAds: 39, revenue: 28517,  cpc: 3.18, winRate: 76, lostBudget: 0,  lostRanking: 24, adsCount: 7 },
+];
+
+export const ADS_SUMMARY = {
+  totalCost:        CAMPAIGNS.reduce((s, c) => s + c.cost, 0),
+  totalRevenue:     CAMPAIGNS.reduce((s, c) => s + c.revenue, 0),
+  totalClicks:      CAMPAIGNS.reduce((s, c) => s + c.clicks, 0),
+  totalImpressions: CAMPAIGNS.reduce((s, c) => s + c.impressions, 0),
+  totalSalesAds:    CAMPAIGNS.reduce((s, c) => s + c.salesProductAds, 0),
+};
+
 export const ADS_METRICS = ITEMS.slice(0, 40).map((item, i) => ({
   ...item,
   impressions: Math.round(1000 + Math.random() * 9000),
@@ -223,17 +273,8 @@ export const ADS_METRICS = ITEMS.slice(0, 40).map((item, i) => ({
   directUnits: Math.round(1 + Math.random() * 20),
   directAmount: Math.round((100 + Math.random() * 2000)),
   roas: Math.round((1 + Math.random() * 9) * 100) / 100,
-  campaignId: `CAMP_${i + 1}`,
+  campaignId: `CAMP_${Math.ceil((i + 1) / 4)}`,
 }));
-
-export const ADS_SUMMARY = {
-  totalCost: 28450,
-  totalSales: 142300,
-  roas: 5.0,
-  avgCtr: 0.048,
-  totalClicks: 12840,
-  totalImpressions: 267500,
-};
 
 export const FREIGHT_ITEMS = ITEMS.slice(0, 60).map((item) => ({
   ...item,
