@@ -275,7 +275,6 @@ export default function DashboardGeral() {
           value={`${DASHBOARD_KPIS.avgScore}/100`}
           icon={<Star className="h-4 w-4" />}
           trend={{ value: 2.1, isPositive: false }}
-          href="/saude?filter=score_low"
         />
         <KpiCard
           label="Itens c/ problema"
