@@ -39,18 +39,18 @@ function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
       className="bg-white rounded-2xl p-5 border border-border card-hover"
       style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-sm text-foreground">{account.name}</h3>
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-sm text-foreground truncate">{account.name}</h3>
           <span
             className={`inline-flex items-center mt-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${healthColors.bg} ${healthColors.text} border ${healthColors.border}`}
           >
             {account.powerSeller}
           </span>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Faturamento 30d</p>
-          <p className="font-bold text-base text-foreground mt-0.5">
+        <div className="text-right flex-shrink-0">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide whitespace-nowrap">Faturamento 30d</p>
+          <p className="font-bold text-base text-foreground mt-0.5 whitespace-nowrap">
             {account.revenue30d.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
           </p>
         </div>
