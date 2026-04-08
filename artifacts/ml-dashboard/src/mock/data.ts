@@ -207,11 +207,15 @@ export const ITEM_DETAIL = {
   }),
 };
 
-export const STOCK_ITEMS = ITEMS.map(item => ({
-  ...item,
-  salesPerDay: item.sales30d / 30,
-  coverageDays: item.stock > 0 && item.sales30d > 0 ? Math.round(item.stock / (item.sales30d / 30)) : 999,
-}));
+export const STOCK_ITEMS = ITEMS.map(item => {
+  const salesPerDay = item.sales30d / 30;
+  const coverageDays = item.stock > 0 && item.sales30d > 0
+    ? Math.round(item.stock / salesPerDay)
+    : 999;
+  const targetStock = Math.ceil(salesPerDay * 30);
+  const suggestedBuy = Math.max(0, targetStock - item.stock);
+  return { ...item, salesPerDay, coverageDays, targetStock, suggestedBuy };
+});
 
 export type CampaignDiagnosis = "excelente" | "bom" | "regular" | "ruim";
 export type CampaignStatus   = "active" | "paused";

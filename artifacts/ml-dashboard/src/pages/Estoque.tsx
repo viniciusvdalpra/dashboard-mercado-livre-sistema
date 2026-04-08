@@ -7,7 +7,7 @@ import { STOCK_ITEMS } from "@/mock/data";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { Package, AlertTriangle, Clock, Archive, Download } from "lucide-react";
+import { Package, AlertTriangle, Clock, Archive, Download, ShoppingCart } from "lucide-react";
 
 type StockFilter = "all" | "ruptura" | "lt30" | "30to60" | "60to90" | "gt90" | "parado";
 
@@ -69,10 +69,12 @@ export default function Estoque() {
   }));
 
   const kpis = {
-    total:   base.reduce((s, i) => s + i.stock, 0),
-    lt30:    counts.lt30,
-    range60: counts["30to60"],
-    parado:  counts.parado,
+    total:       base.reduce((s, i) => s + i.stock, 0),
+    lt30:        counts.lt30,
+    range60:     counts["30to60"],
+    parado:      counts.parado,
+    suggestedBuy: base.reduce((s, i) => s + i.suggestedBuy, 0),
+    itemsNeedBuy: base.filter(i => i.suggestedBuy > 0).length,
   };
 
   const FILTERS: { key: StockFilter; label: string }[] = [
@@ -94,11 +96,13 @@ export default function Estoque() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <KpiCard label="Estoque total (un)" value={kpis.total.toLocaleString("pt-BR")} icon={<Package className="h-4 w-4" />} />
         <KpiCard label="Cobertura < 30d" value={kpis.lt30} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: 8, isPositive: false }} />
         <KpiCard label="Cobertura 30–60d" value={kpis.range60} icon={<Clock className="h-4 w-4" />} />
         <KpiCard label="Parado +60d" value={kpis.parado} icon={<Archive className="h-4 w-4" />} />
+        <KpiCard label="Sugestão de compra (un)" value={kpis.suggestedBuy.toLocaleString("pt-BR")} icon={<ShoppingCart className="h-4 w-4" />} />
+        <KpiCard label="Itens p/ repor" value={kpis.itemsNeedBuy} icon={<ShoppingCart className="h-4 w-4" />} subtext="precisam de compra" />
       </div>
 
       {/* Chart + filters */}
@@ -155,7 +159,8 @@ export default function Estoque() {
                 <th className="px-5 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Curva</th>
                 <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Estoque</th>
                 <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Vendas/dia</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-52">Cobertura</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-48">Cobertura</th>
+                <th className="px-5 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36">Sugestão Compra</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -182,6 +187,17 @@ export default function Estoque() {
                         {item.coverageDays >= 999 ? "—" : item.coverageDays === 0 ? "Ruptura" : `${item.coverageDays}d`}
                       </span>
                     </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {item.suggestedBuy > 0 ? (
+                      <span className="inline-flex items-center gap-1 font-bold text-sm px-2.5 py-1 rounded-lg"
+                        style={{ background: "rgb(239 68 68 / .08)", color: "#b91c1c" }}>
+                        <ShoppingCart className="h-3 w-3" />
+                        {item.suggestedBuy}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
