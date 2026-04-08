@@ -29,7 +29,12 @@ function coverageBarColor(days: number) {
 
 export default function Estoque() {
   const { selectedAccountId } = useGlobalContext();
-  const [activeFilter, setActiveFilter] = useState<StockFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<StockFilter>(() => {
+    const p = new URLSearchParams(window.location.search);
+    const f = p.get("filter") as StockFilter | null;
+    const valid: StockFilter[] = ["all", "ruptura", "lt30", "30to60", "60to90", "gt90", "parado"];
+    return f && valid.includes(f) ? f : "all";
+  });
 
   const base = useMemo(() =>
     selectedAccountId ? STOCK_ITEMS.filter(i => i.accountId === selectedAccountId) : STOCK_ITEMS,

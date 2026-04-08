@@ -100,10 +100,10 @@ export default function Precos() {
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard accent label="Preço médio" value={avgPrice.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<DollarSign className="h-4 w-4" />} />
-        <KpiCard label="Abaixo do mínimo" value={belowCount} icon={<TrendingDown className="h-4 w-4" />} trend={{ value: 5.1, isPositive: false }} />
-        <KpiCard label="Acima do máximo" value={aboveCount} icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard label="Na fila de envio" value={queued.size} icon={<Send className="h-4 w-4" />} />
+        <KpiCard accent label="Preço médio" value={avgPrice.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} icon={<DollarSign className="h-4 w-4" />} onClick={() => { setActiveFilter("all"); setPage(1); }} />
+        <KpiCard label="Abaixo do mínimo" value={belowCount} icon={<TrendingDown className="h-4 w-4" />} trend={{ value: 5.1, isPositive: false }} onClick={() => { setActiveFilter("below_min"); setPage(1); }} />
+        <KpiCard label="Acima do máximo" value={aboveCount} icon={<TrendingUp className="h-4 w-4" />} onClick={() => { setActiveFilter("above_max"); setPage(1); }} />
+        <KpiCard label="Na fila de envio" value={queued.size} icon={<Send className="h-4 w-4" />} onClick={() => { setActiveFilter("queued"); setPage(1); }} />
       </div>
 
       {/* Filters + search */}

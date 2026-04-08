@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface KpiCardProps {
   label: string;
@@ -8,18 +9,34 @@ interface KpiCardProps {
   icon?: React.ReactNode;
   trend?: { value: number; isPositive: boolean; label?: string };
   accent?: boolean;
+  href?: string;
+  onClick?: () => void;
   className?: string;
 }
 
-export function KpiCard({ label, value, subtext, icon, trend, accent, className }: KpiCardProps) {
+export function KpiCard({ label, value, subtext, icon, trend, accent, href, onClick, className }: KpiCardProps) {
+  const [, navigate] = useLocation();
+  const isClickable = !!(href || onClick);
+
+  const handleClick = () => {
+    if (href) navigate(href);
+    else if (onClick) onClick();
+  };
+
   if (accent) {
     return (
       <div
-        className={cn("rounded-2xl p-5 relative overflow-hidden", className)}
+        className={cn("rounded-2xl p-5 relative overflow-hidden select-none", isClickable && "cursor-pointer", className)}
         style={{
           background: "linear-gradient(135deg, hsl(174 55% 22%) 0%, hsl(174 65% 30%) 100%)",
-          boxShadow: "0 8px 24px hsl(174 72% 36% / .25)",
+          boxShadow: isClickable
+            ? "0 8px 24px hsl(174 72% 36% / .25)"
+            : "0 8px 24px hsl(174 72% 36% / .25)",
+          transition: "box-shadow .15s, transform .15s",
         }}
+        onClick={isClickable ? handleClick : undefined}
+        onMouseEnter={e => { if (isClickable) { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 12px 32px hsl(174 72% 36% / .38)"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; } }}
+        onMouseLeave={e => { if (isClickable) { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 24px hsl(174 72% 36% / .25)"; (e.currentTarget as HTMLDivElement).style.transform = ""; } }}
       >
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-8 -right-8 h-28 w-28 rounded-full opacity-10 bg-white" />
@@ -27,11 +44,18 @@ export function KpiCard({ label, value, subtext, icon, trend, accent, className 
         <div className="relative z-10">
           <div className="flex items-start justify-between mb-4">
             <p className="text-teal-200 text-xs font-semibold uppercase tracking-wide">{label}</p>
-            {icon && (
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/15 text-white">
-                {icon}
-              </div>
-            )}
+            <div className="flex items-center gap-1.5">
+              {icon && (
+                <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/15 text-white">
+                  {icon}
+                </div>
+              )}
+              {isClickable && (
+                <div className="h-6 w-6 rounded-lg flex items-center justify-center bg-white/15 text-white/70">
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </div>
+              )}
+            </div>
           </div>
           <p className="text-white text-3xl font-bold tracking-tight mb-2">{value}</p>
           {trend && (
@@ -55,21 +79,37 @@ export function KpiCard({ label, value, subtext, icon, trend, accent, className 
   return (
     <div
       className={cn(
-        "rounded-2xl bg-white p-5 border border-border card-hover",
+        "rounded-2xl bg-white p-5 border border-border transition-all duration-150 select-none",
+        isClickable
+          ? "group cursor-pointer hover:border-primary/30 hover:-translate-y-0.5"
+          : "card-hover",
         className
       )}
-      style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .06), 0 1px 2px rgb(0 0 0 / .04)" }}
+      style={{
+        boxShadow: "0 1px 4px rgb(0 0 0 / .06), 0 1px 2px rgb(0 0 0 / .04)",
+      }}
+      onClick={isClickable ? handleClick : undefined}
     >
       <div className="flex items-start justify-between mb-3">
         <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">{label}</p>
-        {icon && (
-          <div
-            className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: "hsl(174 72% 36% / .10)", color: "hsl(174 55% 32%)" }}
-          >
-            {icon}
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          {icon && (
+            <div
+              className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "hsl(174 72% 36% / .10)", color: "hsl(174 55% 32%)" }}
+            >
+              {icon}
+            </div>
+          )}
+          {isClickable && (
+            <div
+              className="h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: "hsl(174 72% 36% / .08)", color: "hsl(174 55% 32%)" }}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </div>
+          )}
+        </div>
       </div>
       <p className="text-2xl font-bold text-foreground tracking-tight">{value}</p>
       {trend && (
@@ -85,6 +125,11 @@ export function KpiCard({ label, value, subtext, icon, trend, accent, className 
         </div>
       )}
       {subtext && !trend && <p className="text-muted-foreground text-xs mt-1.5">{subtext}</p>}
+      {isClickable && (
+        <p className="text-[10px] text-primary/60 font-semibold mt-2 uppercase tracking-wide flex items-center gap-1">
+          Ver detalhes <ArrowUpRight className="h-3 w-3" />
+        </p>
+      )}
     </div>
   );
 }

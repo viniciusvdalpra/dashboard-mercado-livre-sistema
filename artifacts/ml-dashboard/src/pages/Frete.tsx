@@ -30,7 +30,12 @@ function freightBadge(pct: number, isFree: boolean) {
 
 export default function Frete() {
   const { selectedAccountId } = useGlobalContext();
-  const [activeFilter, setActiveFilter] = useState<FreightFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<FreightFilter>(() => {
+    const p = new URLSearchParams(window.location.search);
+    const f = p.get("filter") as FreightFilter | null;
+    const valid: FreightFilter[] = ["all", "ok", "warn", "danger", "free"];
+    return f && valid.includes(f) ? f : "all";
+  });
 
   const base = useMemo(() =>
     selectedAccountId ? FREIGHT_ITEMS.filter(i => i.accountId === selectedAccountId) : FREIGHT_ITEMS,

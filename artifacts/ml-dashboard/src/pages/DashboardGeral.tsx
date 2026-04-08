@@ -191,21 +191,23 @@ export default function DashboardGeral() {
           value={`${DASHBOARD_KPIS.avgScore}/100`}
           icon={<Star className="h-4 w-4" />}
           trend={{ value: 2.1, isPositive: false }}
+          href="/saude?filter=score_low"
         />
         <KpiCard
           label="Itens c/ problema"
           value={DASHBOARD_KPIS.itemsWithProblem}
           icon={<AlertTriangle className="h-4 w-4" />}
           trend={{ value: 4.2, isPositive: false }}
+          href="/saude?filter=unhealthy"
         />
       </div>
 
       {/* ── Secondary KPIs ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}     icon={<Car className="h-4 w-4" />} />
-        <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} />
-        <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />} />
-        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}          icon={<Package className="h-4 w-4" />} />
+        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}     icon={<Car className="h-4 w-4" />}    href="/saude?filter=compat" />
+        <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs" />
+        <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}   href="/frete?filter=danger" />
+        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}          icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30" />
       </div>
 
       {/* ── Chart + Problems ── */}

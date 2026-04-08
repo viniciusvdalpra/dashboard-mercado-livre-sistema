@@ -32,7 +32,11 @@ export default function SaudeAnuncios() {
   const { selectedAccountId } = useGlobalContext();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score_asc");
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const f = p.get("filter") ?? "all";
+    return QUICK_FILTERS.some(q => q.key === f) ? f : "all";
+  });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
