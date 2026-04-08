@@ -385,7 +385,7 @@ export default function DashboardGeral() {
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
         >
           <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
-          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-0.5">
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1 scrollbar-thin">
             {PROBLEMS.map((p, i) => (
               <div
                 key={i}

@@ -210,6 +210,16 @@
   /* ── Pill badge for KPI trend ── */
   .trend-up   { background: rgb(13 148 136 / .10); color: #0d9488; }
   .trend-down { background: rgb(220 38 38 / .10);  color: #dc2626; }
+
+  /* ── Scrollbar fino e arredondado ── */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar        { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track  { background: transparent; border-radius: 9999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb  { background: hsl(var(--border)); border-radius: 9999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .4); }
 }
 
 @media print {
