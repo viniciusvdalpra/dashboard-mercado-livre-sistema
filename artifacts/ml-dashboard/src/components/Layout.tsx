@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Activity, Package, Megaphone,
   Truck, Wrench, Tags, LogOut, Settings, HelpCircle,
-  Bell, Search, ChevronDown, Store,
+  Bell, ChevronDown, Store,
 } from "lucide-react";
 import { useGlobalContext } from "@/contexts/GlobalContext";
 import { ACCOUNTS } from "@/mock/data";
@@ -164,15 +164,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Right controls */}
           <div className="flex items-center gap-3">
-            {/* Search */}
-            <div className="relative hidden md:flex items-center">
-              <Search className="absolute left-3 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                placeholder="Buscar..."
-                className="h-9 pl-9 pr-4 text-sm rounded-lg border border-border bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary w-48 transition-all focus:w-64"
-              />
-            </div>
-
             {/* Bell */}
             <button className="relative h-9 w-9 flex items-center justify-center rounded-lg border border-border bg-white hover:bg-muted transition-colors">
               <Bell className="h-4 w-4 text-muted-foreground" />
