@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell,
 } from "recharts";
-import { TrendingUp, Download, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { TrendingUp, Download, ChevronDown, ChevronUp, ChevronsUpDown, Truck, Megaphone, Receipt } from "lucide-react";
 
 const BRL = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
@@ -149,14 +149,19 @@ export default function Lucratividade() {
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-        <KpiCard label="Faturamento bruto"   value={BRL(kpis.revenue)}     icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard label="CMV total (ERP)"     value={BRL(kpis.cmv)}         icon={<TrendingUp className="h-4 w-4" />} subtext={`${PCT(kpis.cmv / kpis.revenue * 100)} da receita`} />
-        <KpiCard label="Comissão ML"         value={BRL(kpis.mlComm)}      icon={<TrendingUp className="h-4 w-4" />} subtext={PCT(kpis.mlComm / kpis.revenue * 100)} />
-        <KpiCard label="Frete + Ads + Imp."  value={BRL(kpis.shipping + kpis.ads + kpis.tax + kpis.packaging)} icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard label="Lucro líquido"       value={BRL(kpis.netProfit)}   icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem ${PCT(kpis.avgNetMargin)}`} />
-        <KpiCard label="Pedidos analisados"  value={kpis.count}            icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem bruta ${PCT(kpis.avgGrossMargin)}`} />
+      {/* KPI cards — linha 1 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
+        <KpiCard label="Faturamento bruto"  value={BRL(kpis.revenue)}    icon={<TrendingUp className="h-4 w-4" />} />
+        <KpiCard label="CMV total (ERP)"    value={BRL(kpis.cmv)}        icon={<TrendingUp className="h-4 w-4" />} subtext={`${PCT(kpis.cmv / kpis.revenue * 100)} da receita`} />
+        <KpiCard label="Lucro líquido"      value={BRL(kpis.netProfit)}  icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem ${PCT(kpis.avgNetMargin)}`} />
+        <KpiCard label="Pedidos analisados" value={kpis.count}           icon={<TrendingUp className="h-4 w-4" />} subtext={`Margem bruta ${PCT(kpis.avgGrossMargin)}`} />
+      </div>
+      {/* KPI cards — linha 2: custos detalhados */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <KpiCard label="Comissão ML"        value={BRL(kpis.mlComm)}     icon={<TrendingUp className="h-4 w-4" />} subtext={PCT(kpis.mlComm / kpis.revenue * 100)} />
+        <KpiCard label="Frete (custo real)" value={BRL(kpis.shipping)}   icon={<Truck className="h-4 w-4" />}     subtext={PCT(kpis.shipping / kpis.revenue * 100)} />
+        <KpiCard label="Ads Product"        value={BRL(kpis.ads)}        icon={<Megaphone className="h-4 w-4" />} subtext={PCT(kpis.ads / kpis.revenue * 100)} />
+        <KpiCard label="ICMS (interestadual)" value={BRL(kpis.tax)}      icon={<Receipt className="h-4 w-4" />}   subtext={`Média ${PCT(kpis.tax / kpis.revenue * 100)} · 2,6% + DIFAL`} />
       </div>
 
       {/* Stacked bar chart */}
@@ -204,16 +209,15 @@ export default function Lucratividade() {
                 <th className={`${headerCls} text-right`} onClick={() => toggleSort("mlCommission")}>Comissão<SortIcon k="mlCommission" /></th>
                 <th className={`${headerCls} text-right`} onClick={() => toggleSort("shippingCost")}>Frete<SortIcon k="shippingCost" /></th>
                 <th className={`${headerCls} text-right`} onClick={() => toggleSort("adsCost")}>Ads<SortIcon k="adsCost" /></th>
-                <th className={`${headerCls} text-right`} onClick={() => toggleSort("taxAmount")}>Imposto<SortIcon k="taxAmount" /></th>
+                <th className={`${headerCls} text-right`} onClick={() => toggleSort("taxAmount")}>ICMS<SortIcon k="taxAmount" /></th>
                 <th className={`${headerCls} text-right`} onClick={() => toggleSort("netProfit")}>Lucro Líq.<SortIcon k="netProfit" /></th>
                 <th className={`${headerCls} text-right`} onClick={() => toggleSort("netMargin")}>Margem<SortIcon k="netMargin" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {sorted.map(s => (
-                <>
+                <Fragment key={s.id}>
                   <tr
-                    key={s.id}
                     className="hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => setExpanded(expanded === s.id ? null : s.id)}
                   >
@@ -255,10 +259,18 @@ export default function Lucratividade() {
                             <p><span className="text-muted-foreground">Embalagem:</span> <span className="font-medium">{BRL(s.packagingCost)}</span></p>
                           </div>
                           <div className="space-y-1">
-                            <p className="font-semibold text-foreground mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">Impostos</p>
-                            <p><span className="text-muted-foreground">Regime:</span> <span className="font-medium">Simples Nacional</span></p>
-                            <p><span className="text-muted-foreground">Alíquota:</span> <span className="font-medium text-amber-600">{(s.taxRate * 100).toFixed(2)}%</span></p>
-                            <p><span className="text-muted-foreground">Valor:</span> <span className="font-medium text-amber-600">{BRL(s.taxAmount)}</span></p>
+                            <p className="font-semibold text-foreground mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">ICMS</p>
+                            <p><span className="text-muted-foreground">UF comprador:</span> <span className="font-bold">{s.buyerState}</span></p>
+                            {s.buyerState === "SC" ? (
+                              <p><span className="text-muted-foreground">ICMS interno SC:</span> <span className="font-medium text-amber-600">7,00%</span></p>
+                            ) : (
+                              <>
+                                <p><span className="text-muted-foreground">Interestadual SC:</span> <span className="font-medium">2,60%</span></p>
+                                <p><span className="text-muted-foreground">DIFAL {s.buyerState}:</span> <span className="font-medium">{(s.icmsDifal * 100).toFixed(1)}%</span></p>
+                                <p><span className="text-muted-foreground">Total ICMS:</span> <span className="font-medium text-amber-600">{(s.taxRate * 100).toFixed(2)}%</span></p>
+                              </>
+                            )}
+                            <p><span className="text-muted-foreground">Valor ICMS:</span> <span className="font-bold text-amber-600">{BRL(s.taxAmount)}</span></p>
                           </div>
                           <div className="space-y-1">
                             <p className="font-semibold text-foreground mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">Resultado</p>
@@ -271,7 +283,7 @@ export default function Lucratividade() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

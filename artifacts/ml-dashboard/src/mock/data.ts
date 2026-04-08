@@ -471,7 +471,25 @@ const PROFIT_PRODUCTS = [
   { title: "Bomba D'água Gates WP0101",      sku: "BOM-GAT-W", unitPrice: 142.90, unitCost: 64.00,  mlCommRate: 0.12, weight: 1.1 },
 ];
 
-const TAX_RATE = 0.0654; // Simples Nacional - faixa 3
+// ICMS: origem SC — alíquota interna SC (PF dentro do estado) ou
+// alíquota interestadual 2,6% + DIFAL do estado destino (PF fora de SC)
+const DIFAL_RATES: Record<string, number> = {
+  AC: 0.12,  AL: 0.135, AM: 0.13,  AP: 0.11,  BA: 0.135,
+  CE: 0.13,  DF: 0.13,  ES: 0.10,  GO: 0.12,  MA: 0.16,
+  MT: 0.10,  MS: 0.10,  MG: 0.06,  PA: 0.12,  PB: 0.13,
+  PE: 0.135, PI: 0.155, PR: 0.075, RJ: 0.08,  RN: 0.13,
+  RO: 0.125, RR: 0.13,  RS: 0.05,  SC: 0.00,  SE: 0.12,
+  SP: 0.06,  TO: 0.13,
+};
+
+const BR_STATES = Object.keys(DIFAL_RATES);
+const ICMS_INTERSTATE = 0.026; // alíquota interestadual SC → outros estados (PF)
+const ICMS_INTRA_SC   = 0.07;  // alíquota interna SC (PF dentro de SC)
+
+function icmsRate(state: string) {
+  if (state === "SC") return ICMS_INTRA_SC;
+  return ICMS_INTERSTATE + (DIFAL_RATES[state] ?? 0);
+}
 
 export interface SaleProfitability {
   id: string;
@@ -487,6 +505,9 @@ export interface SaleProfitability {
   mlCommission: number;
   shippingCost: number;
   adsCost: number;
+  buyerState: string;
+  icmsInterstateRate: number;
+  icmsDifal: number;
   taxRate: number;
   taxAmount: number;
   unitCost: number;
@@ -514,10 +535,16 @@ export const SALES_PROFITABILITY: SaleProfitability[] = Array.from({ length: 80 
   const unitPrice = Math.round(prod.unitPrice * priceVariance * 100) / 100;
   const revenue = Math.round(unitPrice * qty * 100) / 100;
 
+  const buyerState = BR_STATES[Math.floor(sf(i * 19, 0, BR_STATES.length))];
+  const rate = icmsRate(buyerState);
+  const icmsInterstateRate = buyerState === "SC" ? ICMS_INTRA_SC : ICMS_INTERSTATE;
+  const icmsDifal = buyerState === "SC" ? 0 : DIFAL_RATES[buyerState] ?? 0;
+  const taxRate = rate;
+  const taxAmount = Math.round(revenue * rate * 100) / 100;
+
   const mlCommission = Math.round(revenue * prod.mlCommRate * 100) / 100;
   const shippingCost = Math.round(sf(i * 11, 8, prod.weight * 8 + 6) * 100) / 100;
   const adsCost = i % 5 === 0 ? 0 : Math.round(revenue * sf(i * 13, 0.03, 0.07) * 100) / 100;
-  const taxAmount = Math.round(revenue * TAX_RATE * 100) / 100;
   const packagingCost = Math.round(sf(i * 17, 3, 7) * 100) / 100;
 
   const unitCost = Math.round(prod.unitCost * (1 + sf(i * 5, -0.03, 0.06)) * 100) / 100;
@@ -544,7 +571,10 @@ export const SALES_PROFITABILITY: SaleProfitability[] = Array.from({ length: 80 
     mlCommission,
     shippingCost,
     adsCost,
-    taxRate: TAX_RATE,
+    buyerState,
+    icmsInterstateRate,
+    icmsDifal,
+    taxRate,
     taxAmount,
     unitCost,
     cmv,
