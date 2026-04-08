@@ -91,9 +91,9 @@ export const PROBLEMS = [
   { type: "infractions", label: "Infrações ativas", count: 2, severity: "red" },
 ];
 
-export const DAILY_SALES = Array.from({ length: 90 }, (_, i) => {
+export const DAILY_SALES = Array.from({ length: 180 }, (_, i) => {
   const date = new Date();
-  date.setDate(date.getDate() - (89 - i));
+  date.setDate(date.getDate() - (179 - i));
 
   // Each account has its own sales rhythm
   const qty_1 = Math.max(0, Math.round(12 + Math.sin(i * 0.40) * 4  + Math.random() * 8));

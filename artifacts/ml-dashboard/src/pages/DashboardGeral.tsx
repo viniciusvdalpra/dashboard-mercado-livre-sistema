@@ -10,9 +10,9 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  ShoppingCart, DollarSign, Star, AlertTriangle,
+  DollarSign, Star, AlertTriangle,
   Car, FileText, Truck, Package, Download,
-  ArrowUpRight,
+  TrendingUp, TrendingDown, ShoppingCart,
 } from "lucide-react";
 
 function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
@@ -74,6 +74,92 @@ function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
         <span className="text-amber-600 font-semibold">{account.pendingDispatch} p/ despachar</span>
         <span className="text-red-600 font-semibold">{account.unhealthy} unhealthy</span>
       </div>
+    </div>
+  );
+}
+
+// ── Revenue period cards ─────────────────────────────────────────────────────
+
+type DailySalesEntry = typeof DAILY_SALES[0];
+
+function RevPeriodCard({
+  days, data, selectedAccountId,
+}: {
+  days: number;
+  data: DailySalesEntry[];
+  selectedAccountId: number | null;
+}) {
+  const revKey = selectedAccountId
+    ? (`revenue_${selectedAccountId}` as keyof DailySalesEntry)
+    : "revenue";
+  const qtyKey = selectedAccountId
+    ? (`qty_${selectedAccountId}` as keyof DailySalesEntry)
+    : "qty";
+
+  const current  = data.slice(-days);
+  const previous = data.slice(-days * 2, -days);
+
+  const curRev  = current.reduce((s, d)  => s + (d[revKey] as number), 0);
+  const prevRev = previous.reduce((s, d) => s + (d[revKey] as number), 0);
+  const curQty  = current.reduce((s, d)  => s + (d[qtyKey] as number), 0);
+  const prevQty = previous.reduce((s, d) => s + (d[qtyKey] as number), 0);
+
+  const revPct = prevRev > 0 ? ((curRev - prevRev) / prevRev) * 100 : 0;
+  const qtyPct = prevQty > 0 ? ((curQty - prevQty) / prevQty) * 100 : 0;
+  const revUp  = revPct >= 0;
+  const qtyUp  = qtyPct >= 0;
+
+  // Date labels from the data entries
+  const curStart  = current[0]?.date  ?? "";
+  const curEnd    = current[current.length - 1]?.date ?? "";
+  const prevStart = previous[0]?.date ?? "";
+  const prevEnd   = previous[previous.length - 1]?.date ?? "";
+
+  return (
+    <div
+      className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-1.5 min-w-0"
+      style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
+    >
+      {/* Period header */}
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-xs font-bold text-primary">{days}d</span>
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          {curStart} – {curEnd}
+        </span>
+      </div>
+
+      {/* Revenue */}
+      <p className="text-lg font-bold text-foreground leading-tight">
+        {curRev.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+      </p>
+
+      {/* Revenue trend */}
+      <div className={`flex items-center gap-1 text-[11px] font-semibold ${revUp ? "text-teal-600" : "text-red-500"}`}>
+        {revUp
+          ? <TrendingUp className="h-3 w-3 flex-shrink-0" />
+          : <TrendingDown className="h-3 w-3 flex-shrink-0" />
+        }
+        <span>{revUp ? "▲" : "▼"} {Math.abs(revPct).toFixed(1)}%</span>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border my-0.5" />
+
+      {/* Orders */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          <ShoppingCart className="h-3 w-3 inline mr-1 -mt-0.5" />
+          {curQty.toLocaleString("pt-BR")} pedidos
+        </span>
+        <span className={`text-[11px] font-semibold ${qtyUp ? "text-teal-600" : "text-red-500"}`}>
+          {qtyUp ? "▲" : "▼"} {Math.abs(qtyPct).toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Comparison period */}
+      <p className="text-[10px] text-muted-foreground">
+        vs {prevStart} – {prevEnd}
+      </p>
     </div>
   );
 }
@@ -240,6 +326,8 @@ const SEVERITY_STYLES: Record<string, string> = {
 };
 
 export default function DashboardGeral() {
+  const { selectedAccountId } = useGlobalContext();
+
   return (
     <Layout>
       {/* ── Action bar ── */}
@@ -255,21 +343,15 @@ export default function DashboardGeral() {
         </div>
       </div>
 
-      {/* ── KPI row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          accent
-          label="Pedidos (30d)"
-          value={DASHBOARD_KPIS.totalOrders30d.toLocaleString("pt-BR")}
-          icon={<ShoppingCart className="h-4 w-4" />}
-          trend={{ value: 12.5, isPositive: true }}
-        />
-        <KpiCard
-          label="Faturamento (30d)"
-          value={DASHBOARD_KPIS.totalRevenue30d.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
-          icon={<DollarSign className="h-4 w-4" />}
-          trend={{ value: 8.3, isPositive: true }}
-        />
+      {/* ── Faturamento por período (5 cards) ── */}
+      <div className="grid grid-cols-5 gap-3 mb-6">
+        {([7, 15, 30, 60, 90] as const).map(d => (
+          <RevPeriodCard key={d} days={d} data={DAILY_SALES} selectedAccountId={selectedAccountId} />
+        ))}
+      </div>
+
+      {/* ── KPIs operacionais ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <KpiCard
           label="Score médio"
           value={`${DASHBOARD_KPIS.avgScore}/100`}
@@ -283,14 +365,10 @@ export default function DashboardGeral() {
           trend={{ value: 4.2, isPositive: false }}
           href="/saude?filter=unhealthy"
         />
-      </div>
-
-      {/* ── Secondary KPIs ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}     icon={<Car className="h-4 w-4" />}    href="/saude?filter=compat" />
+        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}        icon={<Car className="h-4 w-4" />}     href="/saude?filter=compat" />
         <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs" />
-        <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}   href="/frete?filter=danger" />
-        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}          icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30" />
+        <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}  href="/frete?filter=danger" />
+        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}            icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30" />
       </div>
 
       {/* ── Chart + Problems ── */}
