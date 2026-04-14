@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { useLocation } from "wouter";
 import { Store, TrendingUp, ArrowUpRight } from "lucide-react";
 

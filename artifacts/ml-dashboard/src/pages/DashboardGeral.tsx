@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { KpiCard } from "@/components/KpiCard";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import {
   ACCOUNTS, DASHBOARD_KPIS, PROBLEMS, DAILY_SALES,
 } from "@/mock/data";

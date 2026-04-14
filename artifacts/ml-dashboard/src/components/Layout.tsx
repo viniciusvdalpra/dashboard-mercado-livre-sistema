@@ -4,7 +4,7 @@ import {
   Truck, Wrench, Tags, LogOut, Settings, HelpCircle,
   Bell, ChevronDown, Store, Link2, TrendingUp,
 } from "lucide-react";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { ACCOUNTS } from "@/mock/data";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,

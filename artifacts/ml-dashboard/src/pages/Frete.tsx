@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { FREIGHT_ITEMS } from "@/mock/data";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,

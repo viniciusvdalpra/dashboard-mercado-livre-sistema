@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { ScoreBar } from "@/components/ScoreBar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Checkbox } from "@/components/ui/checkbox";

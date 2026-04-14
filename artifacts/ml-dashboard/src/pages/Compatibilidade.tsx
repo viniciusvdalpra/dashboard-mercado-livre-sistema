@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { VEHICLE_CATALOG, ENGINE_OPTIONS, COMPAT_ITEMS } from "@/mock/data";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,

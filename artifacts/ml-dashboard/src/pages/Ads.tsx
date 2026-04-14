@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
-import { useGlobalContext } from "@/contexts/GlobalContext";
+import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { CAMPAIGNS, ADS_METRICS, type Campaign } from "@/mock/data";
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
