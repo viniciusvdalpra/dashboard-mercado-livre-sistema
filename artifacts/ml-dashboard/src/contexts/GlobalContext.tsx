@@ -1,13 +1,5 @@
-import React, { createContext, useState, ReactNode } from "react";
-
-export interface GlobalContextType {
-  isLoggedIn: boolean;
-  setIsLoggedIn: (value: boolean) => void;
-  selectedAccountId: number | null;
-  setSelectedAccountId: (id: number | null) => void;
-}
-
-export const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
+import React, { useState, ReactNode } from "react";
+import { GlobalContext } from "@/contexts/GlobalContextDef";
 
 export function GlobalProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
