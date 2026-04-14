@@ -56,8 +56,13 @@ A integração consiste em substituir os imports de `data.ts` por chamadas reais
 
 ### Endpoint sugerido
 ```
-GET /api/dashboard?period=30&accountId=all
+GET /api/dashboard?accountId=all
 ```
+
+> **Importante:** O endpoint deve sempre retornar **180 dias** de histórico em `DAILY_SALES`, independente de filtro.  
+> Isso é necessário porque o frontend calcula a comparação de períodos internamente:  
+> o card de 90d usa os últimos 90 dias **e** os 90 dias anteriores (total: 180 dias).  
+> Período menor que 180 dias causará comparações incorretas nos cards de 15d, 30d, 60d e 90d.
 
 ### Campos e fontes — `ACCOUNTS[]`
 | Campo | Tipo | Fonte | Campo ML / ERP |
@@ -70,8 +75,8 @@ GET /api/dashboard?period=30&accountId=all
 | `claimsRate` | number | ML | `reputation.metrics.claims.rate` |
 | `cancellationsRate` | number | ML | `reputation.metrics.cancellations.rate` |
 | `delayedRate` | number | ML | `reputation.metrics.delayed_handling_time.rate` |
-| `salesYesterday` | number | ML | Soma de `orders` do dia anterior |
-| `salesTarget` | number | DB | Meta diária configurável por conta |
+| `salesYesterday` | number | ML | Soma de `orders` do dia anterior *(campo disponível, não exibido no card atual — reservado para futuro)* |
+| `salesTarget` | number | DB | Meta diária configurável por conta *(campo disponível, não exibido no card atual — reservado para futuro)* |
 | `revenue30d` | number | ML | Soma de `total_amount` nos últimos 30 dias |
 | `orders30d` | number | ML | Contagem de pedidos nos últimos 30 dias |
 | `pendingDispatch` | number | ML | Pedidos com `order_status=paid` e `shipping_status=handling` |
@@ -81,8 +86,8 @@ GET /api/dashboard?period=30&accountId=all
 ### Campos e fontes — `DASHBOARD_KPIS`
 | Campo | Tipo | Fonte | Descrição |
 |-------|------|-------|-----------|
-| `totalOrders30d` | number | ML | Total de pedidos (todas as contas) |
-| `totalRevenue30d` | number | ML | Faturamento bruto total |
+| `totalOrders30d` | number | ML | Total de pedidos (todas as contas) *(disponível no contrato, não exibido como KPI card — reservado para futuro)* |
+| `totalRevenue30d` | number | ML | Faturamento bruto total *(disponível no contrato, não exibido como KPI card — o faturamento é extraído de `DAILY_SALES` nos cards de período)* |
 | `avgScore` | number | ML | Média ponderada do score de saúde dos anúncios |
 | `itemsWithProblem` | number | ML | Anúncios unhealthy + warning |
 | `compatPending` | number | ML | Anúncios com `compatibility_status=pending_suggestions` |
