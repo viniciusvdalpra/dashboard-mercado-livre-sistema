@@ -7,6 +7,26 @@
 
 ---
 
+## Visão das Telas
+
+As imagens abaixo mostram cada tela do sistema conforme implementado no frontend. Use como referência visual para entender o layout, os botões, e o que cada dado deve alimentar.
+
+| Tela | Rota | Screenshot |
+|------|------|-----------|
+| Login | `/login` | ![Login](./screens/00-login.jpg) |
+| Dashboard Geral | `/` | ![Dashboard](./screens/01-dashboard.jpg) |
+| Saúde dos Anúncios | `/saude` | ![Saúde](./screens/02-saude.jpg) |
+| Detalhe do Anúncio | `/saude/:itemId` | ![Detalhe](./screens/03-item-detalhe.jpg) |
+| Estoque | `/estoque` | ![Estoque](./screens/04-estoque.jpg) |
+| Ads & Campanhas | `/ads` | ![Ads](./screens/05-ads.jpg) |
+| Frete | `/frete` | ![Frete](./screens/06-frete.jpg) |
+| Correções | `/correcoes` | ![Correções](./screens/07-correcoes.jpg) |
+| Preços | `/precos` | ![Preços](./screens/08-precos.jpg) |
+| Vínculos em Massa | `/compatibilidade` | ![Compatibilidade](./screens/09-compatibilidade.jpg) |
+| Lucratividade | `/lucratividade` | ![Lucratividade](./screens/10-lucratividade.jpg) |
+
+---
+
 ## Contexto Geral
 
 O frontend está 100% construído com dados mock em `src/mock/data.ts`.  
@@ -31,6 +51,8 @@ A integração consiste em substituir os imports de `data.ts` por chamadas reais
 ---
 
 ## Módulo T1 — Dashboard Geral (`/`)
+
+![Dashboard Geral](./screens/01-dashboard.jpg)
 
 ### Endpoint sugerido
 ```
@@ -88,6 +110,12 @@ GET /api/dashboard?period=30&accountId=all
 
 ## Módulo T2 — Saúde dos Anúncios (`/saude` e `/saude/:itemId`)
 
+**Lista de anúncios:**
+![Saúde dos Anúncios](./screens/02-saude.jpg)
+
+**Detalhe do anúncio (ao clicar em um item):**
+![Detalhe do Anúncio](./screens/03-item-detalhe.jpg)
+
 ### Endpoint — Lista
 ```
 GET /api/items?accountId=&status=&curve=&page=1&limit=50
@@ -136,6 +164,8 @@ GET /api/items/:mlbId
 
 ## Módulo T3 — Estoque (`/estoque`)
 
+![Estoque](./screens/04-estoque.jpg)
+
 ### Endpoint sugerido
 ```
 GET /api/stock?accountId=&riskOnly=false
@@ -157,6 +187,8 @@ Herda todos os campos de `ITEMS[]` mais:
 ---
 
 ## Módulo T4 — Ads / Campanhas (`/ads`)
+
+![Ads e Campanhas](./screens/05-ads.jpg)
 
 ### Endpoint sugerido
 ```
@@ -192,6 +224,8 @@ GET /api/ads/items?accountId=&campaignId=
 
 ## Módulo T5 — Frete (`/frete`)
 
+![Frete](./screens/06-frete.jpg)
+
 ### Endpoint sugerido
 ```
 GET /api/freight?accountId=&period=30
@@ -220,6 +254,8 @@ Herda `ITEMS[]` mais:
 ---
 
 ## Módulo T6 — Correções Automáticas (`/correcoes`)
+
+![Correções](./screens/07-correcoes.jpg)
 
 ### Endpoint sugerido
 ```
@@ -251,6 +287,8 @@ POST /api/corrections/:id/execute
 ---
 
 ## Módulo T7 — Preços (`/precos`)
+
+![Preços](./screens/08-precos.jpg)
 
 ### Endpoint sugerido
 ```
@@ -284,6 +322,8 @@ Herda `ITEMS[]` mais:
 
 ## Módulo T8 — Compatibilidades (`/compatibilidade`)
 
+![Vínculos em Massa](./screens/09-compatibilidade.jpg)
+
 ### Endpoint sugerido
 ```
 GET  /api/compat?accountId=&status=
@@ -307,6 +347,8 @@ Fonte: ML API — `/categories/:catId/attributes` + base própria DENATRAN/SINDI
 ---
 
 ## Módulo T9 — Lucratividade por Venda (`/lucratividade`)
+
+![Lucratividade](./screens/10-lucratividade.jpg)
 
 Este é o módulo mais complexo. Os dados cruzam **3 fontes diferentes**.
 
