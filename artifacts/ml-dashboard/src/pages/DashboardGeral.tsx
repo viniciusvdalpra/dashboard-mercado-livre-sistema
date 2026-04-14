@@ -40,17 +40,17 @@ function AccountCard({ account }: { account: typeof ACCOUNTS[0] }) {
       style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
     >
       <div className="mb-4">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <h3 className="font-semibold text-sm text-foreground truncate min-w-0">{account.name}</h3>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide whitespace-nowrap flex-shrink-0">Faturamento 30d</p>
-        </div>
+        <h3 className="font-semibold text-sm text-foreground mb-2" title={account.name}>{account.name}</h3>
         <div className="flex items-center justify-between gap-2">
           <span className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full flex-shrink-0 ${healthColors.bg} ${healthColors.text} border ${healthColors.border}`}>
             {account.powerSeller}
           </span>
-          <p className="font-bold text-base text-foreground whitespace-nowrap flex-shrink-0">
-            {account.revenue30d.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
-          </p>
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none mb-0.5">Faturamento 30d</p>
+            <p className="font-bold text-base text-foreground whitespace-nowrap leading-none">
+              {account.revenue30d.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
+            </p>
+          </div>
         </div>
       </div>
 
