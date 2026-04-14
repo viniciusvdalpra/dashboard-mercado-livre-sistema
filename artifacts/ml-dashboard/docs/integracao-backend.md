@@ -395,14 +395,18 @@ GET /api/profitability?accountId=&dateFrom=&dateTo=
 | `taxRate` | number | SC interno=0.07; outros=0.026+DIFAL | Taxa total de ICMS |
 | `taxAmount` | number | `revenue * taxRate` | Valor do ICMS |
 
-**Tabela DIFAL por estado (base de cálculo):**
+**Tabela DIFAL por estado (base de cálculo — alíquota do estado destino):**
 ```
-SP: 9%, MG: 10%, RJ: 10%, PR: 9%, RS: 9%, BA: 12%, GO: 11%,
-PE: 11%, CE: 10%, MT: 11%, MS: 10%, DF: 10%, ES: 10%,
-AM: 12%, PA: 11%, RN: 10%, PI: 10%, AL: 10%, SE: 10%,
-MA: 12%, RO: 11%, AC: 12%, AP: 11%, RR: 12%, TO: 10%
-SC (interno): 7% (não aplica interestadual+DIFAL)
+AC: 12%,  AL: 13.5%, AM: 13%,  AP: 11%,  BA: 13.5%
+CE: 13%,  DF: 13%,   ES: 10%,  GO: 12%,  MA: 16%
+MG:  6%,  MS: 10%,   MT: 10%,  PA: 12%,  PB: 13%
+PE: 13.5%, PI: 15.5%, PR: 7.5%, RJ: 8%,  RN: 13%
+RO: 12.5%, RR: 13%,  RS:  5%,  SE: 12%,  SP:  6%
+TO: 13%
+SC (origem/destino interno): 7% intraestadual — não aplica interestadual + DIFAL
 ```
+> **Fórmula geral (SC → outro estado):** `taxRate = 2.6% (interestadual) + DIFAL[destino]`  
+> **Fórmula SC → SC:** `taxRate = 7% (intraestadual)`
 
 #### Resultados calculados
 | Campo | Tipo | Fórmula |
