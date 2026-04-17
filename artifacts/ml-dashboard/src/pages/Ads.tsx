@@ -285,7 +285,7 @@ function VisaoGeral({ campaigns }: { campaigns: Campaign[] }) {
           <KpiCard label="Receita via Ads" value={brl(summary.revenue)} icon={<TrendingUp className="h-4 w-4" />} trend={{ value: 15, isPositive: true }} />
         </div>
         <KpiCard label="ROAS geral" value={`${summary.roas.toFixed(1)}x`} icon={<BarChart2 className="h-4 w-4" />} />
-        <KpiCard label="ACOS geral" value={`${summary.acos.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} />
+        <KpiCard label="ACOS geral" value={`${summary.acos.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} variant={summary.acos > 20 ? "alert" : summary.acos > 14 ? "warn" : "default"} />
         <KpiCard label="Vendas via Ads" value={num(summary.salesAds)} icon={<TrendingUp className="h-4 w-4" />} />
         <KpiCard label="Cliques" value={num(summary.clicks)} icon={<MousePointerClick className="h-4 w-4" />} />
       </div>

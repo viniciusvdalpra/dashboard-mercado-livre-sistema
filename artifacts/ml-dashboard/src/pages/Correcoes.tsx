@@ -150,7 +150,7 @@ export default function Correcoes() {
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <KpiCard label="Total" value={counts.all} icon={<Wrench className="h-4 w-4" />} onClick={() => { setStatusFilter("all"); setPage(1); }} />
-        <KpiCard label="Pendentes" value={counts.pending} icon={<Clock className="h-4 w-4" />} onClick={() => { setStatusFilter("pending"); setPage(1); }} />
+        <KpiCard label="Pendentes" value={counts.pending} icon={<Clock className="h-4 w-4" />} onClick={() => { setStatusFilter("pending"); setPage(1); }} variant="warn" />
         <KpiCard label="Aprovadas" value={counts.approved} icon={<CheckCircle className="h-4 w-4" />} onClick={() => { setStatusFilter("approved"); setPage(1); }} />
         <KpiCard accent label="Aplicadas" value={counts.applied} icon={<Check className="h-4 w-4" />} onClick={() => { setStatusFilter("applied"); setPage(1); }} />
       </div>

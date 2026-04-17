@@ -91,8 +91,8 @@ export default function Frete() {
           value={totalCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
           icon={<Truck className="h-4 w-4" />}
         />
-        <KpiCard label="Incidência média" value={`${avgPct.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} trend={{ value: 1.3, isPositive: false }} />
-        <KpiCard label="Itens críticos (>18%)" value={counts.danger} icon={<AlertTriangle className="h-4 w-4" />} />
+        <KpiCard label="Incidência média" value={`${avgPct.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} trend={{ value: 1.3, isPositive: false }} variant="warn" />
+        <KpiCard label="Itens críticos (>18%)" value={counts.danger} icon={<AlertTriangle className="h-4 w-4" />} variant="alert" />
         <KpiCard label="Frete grátis" value={`${freeCount} itens`} icon={<Package className="h-4 w-4" />} />
       </div>
 

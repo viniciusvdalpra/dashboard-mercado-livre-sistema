@@ -98,11 +98,11 @@ export default function Estoque() {
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <KpiCard label="Estoque total (un)" value={kpis.total.toLocaleString("pt-BR")} icon={<Package className="h-4 w-4" />} />
-        <KpiCard label="Cobertura < 30d" value={kpis.lt30} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: 8, isPositive: false }} />
-        <KpiCard label="Cobertura 30–60d" value={kpis.range60} icon={<Clock className="h-4 w-4" />} />
-        <KpiCard label="Parado +60d" value={kpis.parado} icon={<Archive className="h-4 w-4" />} />
+        <KpiCard label="Cobertura < 30d" value={kpis.lt30} icon={<AlertTriangle className="h-4 w-4" />} trend={{ value: 8, isPositive: false }} variant="alert" />
+        <KpiCard label="Cobertura 30–60d" value={kpis.range60} icon={<Clock className="h-4 w-4" />} variant="warn" />
+        <KpiCard label="Parado +60d" value={kpis.parado} icon={<Archive className="h-4 w-4" />} variant="warn" />
         <KpiCard label="Sugestão de compra (un)" value={kpis.suggestedBuy.toLocaleString("pt-BR")} icon={<ShoppingCart className="h-4 w-4" />} />
-        <KpiCard label="Itens p/ repor" value={kpis.itemsNeedBuy} icon={<ShoppingCart className="h-4 w-4" />} subtext="precisam de compra" />
+        <KpiCard label="Itens p/ repor" value={kpis.itemsNeedBuy} icon={<ShoppingCart className="h-4 w-4" />} subtext="precisam de compra" variant="warn" />
       </div>
 
       {/* Chart + filters */}
