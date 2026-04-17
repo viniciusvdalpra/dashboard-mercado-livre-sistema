@@ -6,3 +6,9 @@ id = "Hht70430fnRGux7lsH8PW"
 uri = "file://artifacts/ml-dashboard/docs/integracao-backend.md"
 type = "text"
 title = "integracao-backend.md"
+
+[[outputs]]
+id = "N7u0DPSxFbDzX8-RBXI9y"
+uri = "file://artifacts/ml-dashboard/docs/briefing-vps.md"
+type = "text"
+title = "Briefing para Claude Code — VPS"
