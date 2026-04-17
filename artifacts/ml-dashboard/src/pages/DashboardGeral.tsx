@@ -297,8 +297,9 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
                 dataKey={mode === "qty" ? a.qtyKey : a.revKey}
                 name={a.shortName}
                 stroke={a.color}
-                strokeWidth={1.8}
+                strokeWidth={2.5}
                 dot={false}
+                activeDot={{ r: 4 }}
                 isAnimationActive={false}
               />
             ))}
@@ -308,9 +309,10 @@ function SalesChart({ data }: { data: typeof DAILY_SALES }) {
               dataKey={mode === "qty" ? TOTAL_LINE.qtyKey : TOTAL_LINE.revKey}
               name={TOTAL_LINE.shortName}
               stroke={TOTAL_LINE.color}
-              strokeWidth={2.8}
+              strokeWidth={3.5}
               strokeDasharray="6 3"
               dot={false}
+              activeDot={{ r: 5 }}
               isAnimationActive={false}
             />
           </LineChart>
@@ -366,11 +368,12 @@ export default function DashboardGeral() {
           icon={<AlertTriangle className="h-4 w-4" />}
           trend={{ value: 4.2, isPositive: false }}
           href="/saude?filter=unhealthy"
+          variant="alert"
         />
-        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}        icon={<Car className="h-4 w-4" />}     href="/saude?filter=compat" />
-        <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs" />
+        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}        icon={<Car className="h-4 w-4" />}     href="/saude?filter=compat"   variant="warn" />
+        <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs"   variant="warn" />
         <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}  href="/frete?filter=danger" />
-        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}            icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30" />
+        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}            icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30"   variant="warn" />
       </div>
 
       {/* ── Chart + Problems ── */}
@@ -385,15 +388,22 @@ export default function DashboardGeral() {
           <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
           <div className="flex-1 min-h-0 overflow-hidden">
             <div className="h-full overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-              {PROBLEMS.map((p, i) => (
-                <div
-                  key={i}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${SEVERITY_STYLES[p.severity]}`}
-                >
-                  <span className="font-medium text-[13px]">{p.label}</span>
-                  <span className="font-bold text-[15px]">{p.count}</span>
-                </div>
-              ))}
+              {PROBLEMS.map((p, i) => {
+                const countSize =
+                  p.count >= 100 ? "text-[22px]" :
+                  p.count >= 50  ? "text-[19px]" :
+                  p.count >= 20  ? "text-[17px]" :
+                                   "text-[14px]";
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${SEVERITY_STYLES[p.severity]}`}
+                  >
+                    <span className="font-medium text-[13px] leading-tight">{p.label}</span>
+                    <span className={`font-black tabular-nums leading-none ${countSize}`}>{p.count}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
 import { useLocation } from "wouter";
 
+type KpiVariant = "default" | "warn" | "alert";
+
 interface KpiCardProps {
   label: string;
   value: string | number;
@@ -9,14 +11,38 @@ interface KpiCardProps {
   icon?: React.ReactNode;
   trend?: { value: number; isPositive: boolean; label?: string };
   accent?: boolean;
+  variant?: KpiVariant;
   href?: string;
   onClick?: () => void;
   className?: string;
 }
 
-export function KpiCard({ label, value, subtext, icon, trend, accent, href, onClick, className }: KpiCardProps) {
+const VARIANT_STYLES: Record<KpiVariant, {
+  card: string;
+  icon: string;
+  label: string;
+}> = {
+  default: {
+    card: "bg-white border-border",
+    icon: "bg-[hsl(174_72%_36%_/_0.10)] text-[hsl(174_55%_32%)]",
+    label: "text-muted-foreground",
+  },
+  warn: {
+    card: "bg-amber-50 border-amber-200",
+    icon: "bg-amber-100 text-amber-600",
+    label: "text-amber-700",
+  },
+  alert: {
+    card: "bg-red-50 border-red-200",
+    icon: "bg-red-100 text-red-500",
+    label: "text-red-600",
+  },
+};
+
+export function KpiCard({ label, value, subtext, icon, trend, accent, variant = "default", href, onClick, className }: KpiCardProps) {
   const [, navigate] = useLocation();
   const isClickable = !!(href || onClick);
+  const v = VARIANT_STYLES[variant];
 
   const handleClick = () => {
     if (href) navigate(href);
@@ -79,9 +105,10 @@ export function KpiCard({ label, value, subtext, icon, trend, accent, href, onCl
   return (
     <div
       className={cn(
-        "rounded-2xl bg-white p-5 border border-border transition-all duration-150 select-none flex flex-col",
+        "rounded-2xl p-5 border transition-all duration-150 select-none flex flex-col",
+        v.card,
         isClickable
-          ? "group cursor-pointer hover:border-primary/30 hover:-translate-y-0.5"
+          ? "group cursor-pointer hover:-translate-y-0.5"
           : "card-hover",
         className
       )}
@@ -91,20 +118,16 @@ export function KpiCard({ label, value, subtext, icon, trend, accent, href, onCl
       onClick={isClickable ? handleClick : undefined}
     >
       <div className="flex items-start justify-between mb-3">
-        <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide leading-tight min-h-[2.5rem]">{label}</p>
+        <p className={cn("text-xs font-semibold leading-tight min-h-[2rem]", v.label)}>{label}</p>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           {icon && (
-            <div
-              className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "hsl(174 72% 36% / .10)", color: "hsl(174 55% 32%)" }}
-            >
+            <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", v.icon)}>
               {icon}
             </div>
           )}
           {isClickable && (
             <div
-              className="h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ background: "hsl(174 72% 36% / .08)", color: "hsl(174 55% 32%)" }}
+              className={cn("h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity", v.icon)}
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
             </div>
