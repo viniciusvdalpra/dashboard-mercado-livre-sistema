@@ -24,6 +24,12 @@ interface DashAccount {
   revenue_d30: number;
   orders_d30: number;
   specs_avg: number;
+  power_seller_status: string | null;
+  completed_sales: number;
+  claims_rate: number;
+  delayed_rate: number;
+  cancellations_rate: number;
+  reputation_level: string;
 }
 
 interface DashKpis {
@@ -63,7 +69,8 @@ interface DashboardData {
 }
 
 function AccountCard({ account }: { account: DashAccount }) {
-  const health = account.unhealthy > 10 ? "danger" : account.warning > 15 ? "warn" : "ok";
+  const unhealthyPct = account.total_items > 0 ? (account.unhealthy / account.total_items) * 100 : 0;
+  const health = unhealthyPct > 40 ? "danger" : unhealthyPct > 25 ? "warn" : "ok";
 
   const healthColors = {
     ok:     { bg: "bg-teal-50",   text: "text-teal-700",  border: "border-teal-200" },
@@ -71,10 +78,14 @@ function AccountCard({ account }: { account: DashAccount }) {
     danger: { bg: "bg-red-50",    text: "text-red-700",   border: "border-red-200" },
   }[health];
 
+  const powerSellerLabel = account.power_seller_status === "gold" ? "Gold" : account.power_seller_status === "silver" ? "Silver" : account.power_seller_status === "platinum" ? "Platinum" : null;
+
+  const healthyPct = account.total_items > 0 ? Math.round((account.healthy / account.total_items) * 100) : 0;
+
   const metrics = [
-    { label: "Score médio",   value: `${account.avg_score.toFixed(0)}`,  ok: account.avg_score >= 70 },
-    { label: "Ficha %",       value: `${account.specs_avg.toFixed(0)}%`, ok: account.specs_avg >= 80 },
-    { label: "Unhealthy",     value: `${account.unhealthy}`,             ok: account.unhealthy <= 10 },
+    { label: "Score médio",   value: `${account.avg_score.toFixed(0)}`,  ok: account.avg_score >= 55 },
+    { label: "Healthy",       value: `${healthyPct}%`,                   ok: healthyPct >= 50 },
+    { label: "Pedidos 30d",   value: `${account.orders_d30}`,            ok: account.orders_d30 > 0 },
   ];
 
   return (
@@ -83,16 +94,26 @@ function AccountCard({ account }: { account: DashAccount }) {
       style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
     >
       <div className="mb-4">
-        <h3 className="font-semibold text-sm text-foreground mb-2" title={account.name}>{account.name}</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-sm text-foreground" title={account.name}>{account.name}</h3>
+          <div className="flex items-center gap-1.5">
+            {powerSellerLabel && (
+              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+                {powerSellerLabel}
+              </span>
+            )}
+            <span className={`inline-flex items-center text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${healthColors.bg} ${healthColors.text} border ${healthColors.border}`}>
+              {health === "ok" ? "Saudável" : health === "warn" ? "Atenção" : "Crítico"}
+            </span>
+          </div>
+        </div>
         <div className="flex items-center justify-between gap-2">
-          <span className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full flex-shrink-0 ${healthColors.bg} ${healthColors.text} border ${healthColors.border}`}>
-            {health === "ok" ? "Saudável" : health === "warn" ? "Atenção" : "Crítico"}
-          </span>
+          <span className="text-xs text-muted-foreground">{account.total_items.toLocaleString("pt-BR")} anúncios</span>
           <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none mb-0.5">Faturamento 30d</p>
             <p className="font-bold text-base text-foreground whitespace-nowrap leading-none">
               {account.revenue_d30.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}
             </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">faturamento 30d</p>
           </div>
         </div>
       </div>
@@ -111,7 +132,7 @@ function AccountCard({ account }: { account: DashAccount }) {
       </div>
 
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
-        <span className="font-medium">{account.orders_d30} pedidos</span>
+        <span className="font-medium text-teal-600">{account.healthy} healthy</span>
         <span className="text-amber-600 font-semibold">{account.warning} warning</span>
         <span className="text-red-600 font-semibold">{account.unhealthy} unhealthy</span>
       </div>

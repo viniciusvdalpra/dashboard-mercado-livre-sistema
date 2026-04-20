@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { useLocation } from "wouter";
 import { Store, TrendingUp, ArrowUpRight } from "lucide-react";
+import { apiUrl } from "@/lib/api";
 
 const STATS = [
-  { value: "15.284", label: "Anúncios ativos", up: true },
-  { value: "R$ 484k", label: "Faturamento/mês", up: true },
-  { value: "1.518",  label: "Pedidos este mês", up: false },
-  { value: "97,2%",  label: "Pedidos no prazo",  up: true },
+  { value: "10.076", label: "Anúncios ativos", up: true },
+  { value: "R$ 571k", label: "Faturamento/mês", up: true },
+  { value: "1.124",  label: "Pedidos este mês", up: true },
+  { value: "97,9%",  label: "Pedidos no prazo",  up: true },
 ];
 
 export default function Login() {
@@ -25,7 +26,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(apiUrl("/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
