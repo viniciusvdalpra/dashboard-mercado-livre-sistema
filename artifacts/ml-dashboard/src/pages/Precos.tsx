@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
-import { api } from "@/lib/api";
+import { PRICE_ITEMS } from "@/mock/data";
 import {
   DollarSign, TrendingDown, TrendingUp, ArrowUpDown,
   Send, CheckCircle, Search, ChevronLeft, ChevronRight, Download,
@@ -33,38 +33,6 @@ function priceBadgeLabel(price: number, min: number, max: number) {
   return "OK";
 }
 
-interface RawPrice {
-  ml_item_id: string;
-  title: string;
-  account_slug: string;
-  current_price: number;
-  ml_suggested_price: number;
-  gap_percent: number;
-  abc_curve: string;
-  min_price?: number;
-  max_price?: number;
-  competitors?: number;
-}
-
-function transformPrice(raw: RawPrice) {
-  const price = raw.current_price;
-  const suggested = raw.ml_suggested_price || price;
-  const minPrice = raw.min_price ?? price * 0.85;
-  const maxPrice = raw.max_price ?? price * 1.3;
-  return {
-    id: raw.ml_item_id,
-    title: raw.title,
-    accountId: raw.account_slug,
-    accountName: "Conta " + raw.account_slug,
-    price,
-    minPrice,
-    maxPrice,
-    suggestedPrice: suggested,
-    competitors: raw.competitors ?? 0,
-    gap: raw.gap_percent ?? 0,
-  };
-}
-
 export default function Precos() {
   const { selectedAccountId } = useGlobalContext();
   const { toast } = useToast();
@@ -72,20 +40,11 @@ export default function Precos() {
   const [search, setSearch] = useState("");
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
-  const [priceItems, setPriceItems] = useState<ReturnType<typeof transformPrice>[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ per_page: "2000" });
-    if (selectedAccountId) params.set("account", selectedAccountId);
-    api.get<{ prices: RawPrice[] }>(`/prices?${params}`).then(data => {
-      setPriceItems((data.prices || []).map(transformPrice));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [selectedAccountId]);
-
-  const base = priceItems;
+  const base = useMemo(() =>
+    selectedAccountId ? PRICE_ITEMS.filter(i => i.accountId === selectedAccountId) : PRICE_ITEMS,
+    [selectedAccountId]
+  );
 
   const filtered = useMemo(() => {
     let list = [...base];
@@ -197,10 +156,7 @@ export default function Precos() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading && (
-                <tr><td colSpan={8} className="py-16 text-center text-sm text-muted-foreground">Carregando...</td></tr>
-              )}
-              {!loading && paginated.length === 0 && (
+              {paginated.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -213,7 +169,7 @@ export default function Precos() {
                   </td>
                 </tr>
               )}
-              {!loading && paginated.map(item => {
+              {paginated.map(item => {
                 const isQueued = queued.has(item.id);
                 return (
                   <tr key={item.id} className="hover:bg-muted/30 transition-colors">

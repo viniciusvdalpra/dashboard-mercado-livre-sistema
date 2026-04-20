@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Activity, Package, Megaphone,
@@ -6,17 +5,10 @@ import {
   Bell, ChevronDown, Store, Link2, TrendingUp,
 } from "lucide-react";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
-import { api } from "@/lib/api";
+import { ACCOUNTS } from "@/mock/data";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-
-interface Account {
-  id: number;
-  name: string;
-  slug: string;
-  is_active: boolean;
-}
 
 const NAV_MAIN = [
   { path: "/",          label: "Dashboard",          icon: LayoutDashboard },
@@ -56,11 +48,6 @@ function NavItem({ path, label, icon: Icon, active }: {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { selectedAccountId, setSelectedAccountId, setIsLoggedIn } = useGlobalContext();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-
-  useEffect(() => {
-    api.get<Account[]>("/accounts").then(setAccounts).catch(() => {});
-  }, []);
 
   const isActive = (path: string) =>
     path === "/" ? location === "/" : location.startsWith(path);
@@ -72,7 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background font-sans">
 
-      {/* Sidebar */}
+      {/* ── Sidebar ── */}
       <aside
         className="fixed left-0 top-0 z-40 h-screen w-58 flex flex-col bg-sidebar"
         style={{
@@ -161,7 +148,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main area */}
+      {/* ── Main area ── */}
       <div className="flex flex-col flex-1 min-w-0" style={{ paddingLeft: 224 }}>
 
         {/* Top header */}
@@ -169,6 +156,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           className="sticky top-0 z-30 h-16 flex items-center justify-between px-7 bg-white"
           style={{ borderBottom: "1px solid hsl(var(--border))", boxShadow: "0 1px 3px rgb(0 0 0 / .05)" }}
         >
+          {/* Left: title */}
           <div>
             <h1 className="text-lg font-bold text-foreground tracking-tight">{currentPage}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -176,15 +164,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
+          {/* Right controls */}
           <div className="flex items-center gap-3">
+            {/* Bell */}
             <button className="relative h-9 w-9 flex items-center justify-center rounded-lg border border-border bg-white hover:bg-muted transition-colors">
               <Bell className="h-4 w-4 text-muted-foreground" />
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
             </button>
 
+            {/* Account selector */}
             <Select
-              value={selectedAccountId === null ? "all" : selectedAccountId}
-              onValueChange={v => setSelectedAccountId(v === "all" ? null : v)}
+              value={selectedAccountId === null ? "all" : selectedAccountId.toString()}
+              onValueChange={v => setSelectedAccountId(v === "all" ? null : Number(v))}
             >
               <SelectTrigger
                 className="h-9 w-[180px] bg-white border-border text-sm font-medium"
@@ -194,14 +185,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as contas</SelectItem>
-                {accounts.map(acc => (
-                  <SelectItem key={acc.slug} value={acc.slug}>
+                {ACCOUNTS.map(acc => (
+                  <SelectItem key={acc.id} value={acc.id.toString()}>
                     {acc.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
+            {/* Avatar */}
             <div className="flex items-center gap-2 pl-1">
               <div
                 className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
@@ -218,6 +210,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {/* Page content */}
         <main className="flex-1 p-7 overflow-x-hidden">
           {children}
         </main>

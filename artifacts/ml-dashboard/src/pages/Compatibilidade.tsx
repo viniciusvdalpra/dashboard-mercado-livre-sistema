@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
-import { VEHICLE_CATALOG, ENGINE_OPTIONS } from "@/mock/data";
-import { api } from "@/lib/api";
+import { VEHICLE_CATALOG, ENGINE_OPTIONS, COMPAT_ITEMS } from "@/mock/data";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -18,16 +17,6 @@ interface SelectedVehicle {
   anoFim: string;
   motor: string;
   label: string;
-}
-
-interface CompatItem {
-  id: string;
-  title: string;
-  sku: string;
-  accountId: string;
-  accountName: string;
-  needsCompat: boolean;
-  compatCount: number;
 }
 
 const PAGE_SIZE = 20;
@@ -65,31 +54,16 @@ export default function Compatibilidade() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage]         = useState(1);
   const [applying, setApplying] = useState(false);
-  const [items, setItems]       = useState<CompatItem[]>([]);
-  const [loading, setLoading]   = useState(true);
 
   const modelos = marca ? Object.keys(VEHICLE_CATALOG[marca]).sort() : [];
   const anos    = modelo && marca ? VEHICLE_CATALOG[marca][modelo] : [];
 
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ per_page: "2000" });
-    if (selectedAccountId) params.set("account", selectedAccountId);
-    api.get<{ items: any[] }>(`/items?${params}`).then(data => {
-      setItems((data.items || []).map((raw: any) => ({
-        id: raw.ml_item_id,
-        title: raw.title,
-        sku: raw.ml_item_id,
-        accountId: raw.account_slug,
-        accountName: "Conta " + raw.account_slug,
-        needsCompat: !raw.has_compatibilities,
-        compatCount: raw.has_compatibilities ? 1 : 0,
-      })));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [selectedAccountId]);
-
-  const base = items;
+  const base = useMemo(() =>
+    selectedAccountId
+      ? COMPAT_ITEMS.filter(i => i.accountId === selectedAccountId)
+      : COMPAT_ITEMS,
+    [selectedAccountId]
+  );
 
   const filtered = useMemo(() => {
     let list = tab === "needs" ? base.filter(i => i.needsCompat) : base;
@@ -167,7 +141,7 @@ export default function Compatibilidade() {
 
       <div className="flex gap-5 h-full" style={{ minHeight: "calc(100vh - 220px)" }}>
 
-        {/* Left panel: vehicle selector */}
+        {/* ── Left panel: vehicle selector ── */}
         <div
           className="w-72 flex-shrink-0 bg-white rounded-2xl border border-border p-5 flex flex-col gap-4"
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)", alignSelf: "start" }}
@@ -177,68 +151,106 @@ export default function Compatibilidade() {
             <p className="text-xs text-muted-foreground">Defina marca, modelo e faixa de anos</p>
           </div>
 
+          {/* Marca */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Marca</label>
             <Select value={marca} onValueChange={v => { setMarca(v); setModelo(""); setAnoInicio(""); setAnoFim(""); }}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecionar marca" /></SelectTrigger>
-              <SelectContent>{marcas.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Selecionar marca" />
+              </SelectTrigger>
+              <SelectContent>
+                {marcas.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
 
+          {/* Modelo */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Modelo</label>
             <Select value={modelo} onValueChange={v => { setModelo(v); setAnoInicio(""); setAnoFim(""); }} disabled={!marca}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={marca ? "Selecionar modelo" : "Selecione a marca"} /></SelectTrigger>
-              <SelectContent>{modelos.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder={marca ? "Selecionar modelo" : "Selecione a marca"} />
+              </SelectTrigger>
+              <SelectContent>
+                {modelos.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
 
+          {/* Ano De / Até */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ano de</label>
               <Select value={anoInicio} onValueChange={setAnoInicio} disabled={!modelo}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="De" /></SelectTrigger>
-                <SelectContent>{anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="De" />
+                </SelectTrigger>
+                <SelectContent>
+                  {anos.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ano até</label>
               <Select value={anoFim} onValueChange={setAnoFim} disabled={!anoInicio}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Até" /></SelectTrigger>
-                <SelectContent>{anos.filter(a => a >= anoInicio).map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Até" />
+                </SelectTrigger>
+                <SelectContent>
+                  {anos.filter(a => a >= anoInicio).map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
           </div>
 
+          {/* Motorização */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Motorização <span className="normal-case font-normal">(opcional)</span>
             </label>
             <Select value={motor} onValueChange={setMotor} disabled={!modelo}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Todos os motores" /></SelectTrigger>
-              <SelectContent>{ENGINE_OPTIONS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Todos os motores" />
+              </SelectTrigger>
+              <SelectContent>
+                {ENGINE_OPTIONS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
 
+          {/* Add button */}
           <button
             onClick={handleAddVehicle}
             disabled={!canAdd}
             className="w-full h-9 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
             style={{
-              background: canAdd ? "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 32%))" : undefined,
+              background: canAdd
+                ? "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 32%))"
+                : undefined,
               backgroundColor: !canAdd ? "hsl(var(--muted))" : undefined,
             }}
           >
-            <Car className="h-4 w-4" /> Adicionar veículo
+            <Car className="h-4 w-4" />
+            Adicionar veículo
           </button>
 
+          {/* Vehicle list */}
           {vehicles.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selecionados ({vehicles.length})</p>
-                <button onClick={() => setVehicles([])} className="text-[10px] text-muted-foreground hover:text-red-600 transition-colors">Limpar tudo</button>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Selecionados ({vehicles.length})
+                </p>
+                <button
+                  onClick={() => setVehicles([])}
+                  className="text-[10px] text-muted-foreground hover:text-red-600 transition-colors"
+                >
+                  Limpar tudo
+                </button>
               </div>
-              {vehicles.map(v => (<VehicleTag key={v.id} vehicle={v} onRemove={() => removeVehicle(v.id)} />))}
+              {vehicles.map(v => (
+                <VehicleTag key={v.id} vehicle={v} onRemove={() => removeVehicle(v.id)} />
+              ))}
             </div>
           )}
 
@@ -250,8 +262,10 @@ export default function Compatibilidade() {
           )}
         </div>
 
-        {/* Main: listing */}
+        {/* ── Main: listing selector ── */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
+
+          {/* Tabs + search */}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex gap-1 bg-white border border-border rounded-xl p-1">
               {([
@@ -262,7 +276,9 @@ export default function Compatibilidade() {
                   key={t.key}
                   onClick={() => { setTab(t.key); setPage(1); setSelectedIds(new Set()); }}
                   className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    tab === t.key ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    tab === t.key
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                 >
                   {t.label}
@@ -280,12 +296,21 @@ export default function Compatibilidade() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-border overflow-hidden" style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
+          {/* Table */}
+          <div
+            className="bg-white rounded-2xl border border-border overflow-hidden"
+            style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}
+          >
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border" style={{ background: "hsl(var(--muted))" }}>
                   <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={allPageSelected} onChange={toggleAll} className="rounded accent-teal-600" />
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleAll}
+                      className="rounded accent-teal-600"
+                    />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Título</th>
                   <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">MLB</th>
@@ -294,13 +319,13 @@ export default function Compatibilidade() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {loading && (
-                  <tr><td colSpan={5} className="py-12 text-center text-sm text-muted-foreground">Carregando...</td></tr>
-                )}
-                {!loading && paginated.length === 0 && (
-                  <tr><td colSpan={5} className="py-12 text-center text-sm text-muted-foreground">Nenhum anúncio encontrado</td></tr>
-                )}
-                {!loading && paginated.map(item => {
+                {paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                      Nenhum anúncio encontrado
+                    </td>
+                  </tr>
+                ) : paginated.map(item => {
                   const checked = selectedIds.has(item.id);
                   return (
                     <tr
@@ -309,18 +334,28 @@ export default function Compatibilidade() {
                       className={`cursor-pointer transition-colors ${checked ? "bg-teal-50/60" : "hover:bg-muted/40"}`}
                     >
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleItem(item.id)} className="rounded accent-teal-600" />
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleItem(item.id)}
+                          className="rounded accent-teal-600"
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-foreground text-xs leading-snug line-clamp-2">{item.title}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">{item.sku}</p>
                       </td>
-                      <td className="px-3 py-3"><span className="text-xs font-mono text-muted-foreground">{item.id}</span></td>
-                      <td className="px-3 py-3"><span className="text-xs text-muted-foreground">{item.accountName}</span></td>
+                      <td className="px-3 py-3">
+                        <span className="text-xs font-mono text-muted-foreground">{item.id}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="text-xs text-muted-foreground">{item.accountName}</span>
+                      </td>
                       <td className="px-3 py-3 text-center">
                         {item.compatCount > 0 ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
-                            <Car className="h-3 w-3" /> Sim
+                            <Car className="h-3 w-3" />
+                            {item.compatCount}
                           </span>
                         ) : (
                           <span className="inline-flex text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
@@ -334,12 +369,27 @@ export default function Compatibilidade() {
               </tbody>
             </table>
 
+            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
-                <p className="text-xs text-muted-foreground">{filtered.length} anúncios · página {page} de {totalPages}</p>
+                <p className="text-xs text-muted-foreground">
+                  {filtered.length} anúncios · página {page} de {totalPages}
+                </p>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"><ChevronLeft className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"><ChevronRight className="h-3.5 w-3.5" /></button>
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
             )}
@@ -347,31 +397,64 @@ export default function Compatibilidade() {
         </div>
       </div>
 
-      {/* Sticky action bar */}
+      {/* ── Sticky action bar ── */}
       <div
         className="fixed bottom-0 right-0 z-30 flex items-center justify-between gap-6 px-8 py-4"
-        style={{ left: 224, background: "white", borderTop: "1px solid hsl(var(--border))", boxShadow: "0 -4px 16px rgb(0 0 0 / .06)" }}
+        style={{
+          left: 224,
+          background: "white",
+          borderTop: "1px solid hsl(var(--border))",
+          boxShadow: "0 -4px 16px rgb(0 0 0 / .06)",
+        }}
       >
         <div className="flex items-center gap-6">
-          <div className="text-sm"><span className="font-bold text-foreground">{vehicles.length}</span><span className="text-muted-foreground ml-1">veículo(s)</span></div>
+          <div className="text-sm">
+            <span className="font-bold text-foreground">{vehicles.length}</span>
+            <span className="text-muted-foreground ml-1">veículo(s)</span>
+          </div>
           <div className="h-4 w-px bg-border" />
-          <div className="text-sm"><span className="font-bold text-foreground">{selectedIds.size}</span><span className="text-muted-foreground ml-1">anúncio(s) selecionado(s)</span></div>
-          {totalLinks > 0 && (<><div className="h-4 w-px bg-border" /><div className="text-sm"><span className="font-bold text-primary">{totalLinks}</span><span className="text-muted-foreground ml-1">vínculos a criar</span></div></>)}
+          <div className="text-sm">
+            <span className="font-bold text-foreground">{selectedIds.size}</span>
+            <span className="text-muted-foreground ml-1">anúncio(s) selecionado(s)</span>
+          </div>
+          {totalLinks > 0 && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <div className="text-sm">
+                <span className="font-bold text-primary">{totalLinks}</span>
+                <span className="text-muted-foreground ml-1">vínculos a criar</span>
+              </div>
+            </>
+          )}
         </div>
+
         <div className="flex items-center gap-3">
           {selectedIds.size > 0 && (
-            <button onClick={() => setSelectedIds(new Set())} className="h-9 px-4 text-sm font-semibold text-muted-foreground bg-muted rounded-xl border border-border hover:bg-muted/80 transition-colors">Limpar seleção</button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="h-9 px-4 text-sm font-semibold text-muted-foreground bg-muted rounded-xl border border-border hover:bg-muted/80 transition-colors"
+            >
+              Limpar seleção
+            </button>
           )}
           <button
             onClick={handleApply}
             disabled={!totalLinks || applying}
             className="h-9 px-6 flex items-center gap-2 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: totalLinks ? "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 32%))" : undefined, backgroundColor: !totalLinks ? "hsl(var(--muted))" : undefined }}
+            style={{
+              background: totalLinks
+                ? "linear-gradient(135deg, hsl(174 55% 26%), hsl(174 65% 32%))"
+                : undefined,
+              backgroundColor: !totalLinks ? "hsl(var(--muted))" : undefined,
+            }}
           >
-            <CheckSquare className="h-4 w-4" /> {applying ? "Aplicando..." : "Aplicar vínculos"}
+            <CheckSquare className="h-4 w-4" />
+            {applying ? "Aplicando..." : "Aplicar vínculos"}
           </button>
         </div>
       </div>
+
+      {/* Spacer for sticky bar */}
       <div className="h-20" />
     </Layout>
   );

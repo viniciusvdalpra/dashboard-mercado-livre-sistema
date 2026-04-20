@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
-import { api } from "@/lib/api";
+import { STOCK_ITEMS } from "@/mock/data";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -27,35 +27,6 @@ function coverageBarColor(days: number) {
   return "bg-gray-300";
 }
 
-interface RawStockItem {
-  ml_item_id: string;
-  title: string;
-  account_slug: string;
-  available_quantity: number;
-  sold_quantity_d30: number;
-  coverage_days: number;
-  abc_curve: string;
-}
-
-function transformStock(raw: RawStockItem) {
-  const salesPerDay = raw.sold_quantity_d30 / 30;
-  const targetStock = Math.ceil(salesPerDay * 60);
-  const suggestedBuy = Math.max(0, Math.ceil(salesPerDay * 30 - raw.available_quantity));
-  return {
-    id: raw.ml_item_id,
-    title: raw.title,
-    accountId: raw.account_slug,
-    accountName: "Conta " + raw.account_slug,
-    stock: raw.available_quantity,
-    sales30d: raw.sold_quantity_d30,
-    salesPerDay,
-    coverageDays: raw.coverage_days ?? (salesPerDay > 0 ? Math.floor(raw.available_quantity / salesPerDay) : 999),
-    curve: raw.abc_curve || "C",
-    targetStock,
-    suggestedBuy,
-  };
-}
-
 export default function Estoque() {
   const { selectedAccountId } = useGlobalContext();
   const [activeFilter, setActiveFilter] = useState<StockFilter>(() => {
@@ -64,20 +35,11 @@ export default function Estoque() {
     const valid: StockFilter[] = ["all", "ruptura", "lt30", "30to60", "60to90", "gt90", "parado"];
     return f && valid.includes(f) ? f : "all";
   });
-  const [stockItems, setStockItems] = useState<ReturnType<typeof transformStock>[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ per_page: "2000" });
-    if (selectedAccountId) params.set("account", selectedAccountId);
-    api.get<{ items: RawStockItem[] }>(`/stock?${params}`).then(data => {
-      setStockItems((data.items || []).map(transformStock));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [selectedAccountId]);
-
-  const base = stockItems;
+  const base = useMemo(() =>
+    selectedAccountId ? STOCK_ITEMS.filter(i => i.accountId === selectedAccountId) : STOCK_ITEMS,
+    [selectedAccountId]
+  );
 
   const counts = useMemo(() => ({
     all:    base.length,
@@ -202,10 +164,7 @@ export default function Estoque() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading && (
-                <tr><td colSpan={6} className="py-16 text-center text-sm text-muted-foreground">Carregando...</td></tr>
-              )}
-              {!loading && items.map(item => (
+              {items.map(item => (
                 <tr key={item.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-5 py-3.5">
                     <div className="font-semibold text-foreground truncate max-w-[300px]">{item.title}</div>

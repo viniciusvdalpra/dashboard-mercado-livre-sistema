@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api } from "@/lib/api";
+import { CORRECTIONS } from "@/mock/data";
 import {
   CheckCircle, Clock, AlertCircle, Wrench, Check, ChevronLeft, ChevronRight, Download,
 } from "lucide-react";
@@ -47,44 +47,6 @@ const STATUS_ICON: Record<Status, React.ReactNode> = {
   applied:  <Check className="h-3 w-3" />,
 };
 
-interface RawCorrection {
-  id: number;
-  ml_item_id: string;
-  item_title: string;
-  account_slug: string;
-  correction_type: string;
-  field_name: string;
-  old_value: string;
-  new_value: string;
-  status: string;
-  created_at: string;
-  executed_at: string | null;
-}
-
-const TYPE_MAP: Record<string, string> = {
-  specs_fill: "specs", specs_hidden: "specs",
-  ean_fill: "ean", compat_fill: "compat",
-  title_optimize: "title", price_adjust: "price",
-};
-const STATUS_MAP_RAW: Record<string, Status> = {
-  pending: "pending", approved: "approved",
-  executed: "applied", rejected: "approved",
-};
-
-function transformCorrection(raw: RawCorrection) {
-  return {
-    id: String(raw.id),
-    itemId: raw.ml_item_id,
-    title: raw.item_title || "",
-    accountId: raw.account_slug,
-    accountName: "Conta " + raw.account_slug,
-    type: TYPE_MAP[raw.correction_type] ?? "specs",
-    from: raw.old_value || "",
-    to: raw.new_value || "",
-    status: (STATUS_MAP_RAW[raw.status] ?? "pending") as Status,
-  };
-}
-
 export default function Correcoes() {
   const { selectedAccountId } = useGlobalContext();
   const { toast } = useToast();
@@ -93,20 +55,35 @@ export default function Correcoes() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [localStatuses, setLocalStatuses] = useState<Record<string, Status>>({});
   const [page, setPage] = useState(1);
-  const [corrections, setCorrections] = useState<ReturnType<typeof transformCorrection>[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ per_page: "2000" });
-    if (selectedAccountId) params.set("account", selectedAccountId);
-    api.get<{ corrections: RawCorrection[] }>(`/corrections?${params}`).then(data => {
-      setCorrections((data.corrections || []).map(transformCorrection));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [selectedAccountId]);
+  const TYPE_MAP: Record<string, string> = {
+    specs_fill: "specs", specs_hidden: "specs",
+    ean_fill: "ean", compat_fill: "compat",
+    title_optimize: "title", price_adjust: "price",
+  };
+  const STATUS_MAP_RAW: Record<string, Status> = {
+    pending: "pending", approved: "approved",
+    executed: "applied", rejected: "approved",
+  };
 
-  const base = corrections;
+  const base = useMemo(() => {
+    const raw = selectedAccountId
+      ? CORRECTIONS.filter(c => c.accountId === selectedAccountId)
+      : CORRECTIONS;
+    return raw.map(c => ({
+      id: String(c.id),
+      itemId: c.itemId,
+      title: (c as any).itemTitle ?? "",
+      accountId: c.accountId,
+      accountName: c.accountName,
+      type: TYPE_MAP[(c.type as string)] ?? "specs",
+      from: (c as any).oldValue ?? "",
+      to: (c as any).newValue ?? "",
+      status: STATUS_MAP_RAW[(c.status as string)] ?? "pending",
+    }));
+  }, // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedAccountId]
+  );
 
   const filtered = useMemo(() => {
     let list = base.map(c => ({
@@ -252,10 +229,7 @@ export default function Correcoes() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading && (
-                <tr><td colSpan={7} className="py-16 text-center text-sm text-muted-foreground">Carregando...</td></tr>
-              )}
-              {!loading && paginated.length === 0 && (
+              {paginated.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -268,7 +242,7 @@ export default function Correcoes() {
                   </td>
                 </tr>
               )}
-              {!loading && paginated.map(c => (
+              {paginated.map(c => (
                 <tr key={c.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3.5">
                     {c.status === "pending" && (
