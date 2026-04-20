@@ -165,6 +165,18 @@ export function transformPrices(apiPrices: any[]) {
   });
 }
 
+export function transformCompatItems(apiItems: any[]) {
+  return apiItems.map(item => ({
+    id: item.ml_item_id,
+    title: item.title,
+    sku: item.sku ?? "",
+    accountId: SLUG_TO_ID[item.account_slug] ?? 1,
+    accountName: SLUG_TO_NAME[item.account_slug] ?? item.account_name ?? item.account_slug,
+    compatCount: item.compatibilities_count ?? 0,
+    needsCompat: !(item.has_compatibilities),
+  }));
+}
+
 // Profitability already matches the mock shape exactly from the API
 export function transformProfitability(apiItems: any[]) {
   return apiItems.map(item => ({

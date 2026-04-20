@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/select";
 import { Car, X, Search, ChevronLeft, ChevronRight, CheckSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useApiData } from "@/hooks/useApiData";
+import { transformCompatItems } from "@/lib/transforms";
 
 interface SelectedVehicle {
   id: string;
@@ -40,7 +42,17 @@ export default function Compatibilidade() {
   const { selectedAccountId } = useGlobalContext();
   const { toast } = useToast();
 
-  const marcas = Object.keys(VEHICLE_CATALOG).sort();
+  const { data: apiData } = useApiData("/compatibilities?per_page=50000", null, (raw) => ({
+    items: transformCompatItems(raw.items ?? []),
+    vehicle_catalog: raw.vehicle_catalog as Record<string, Record<string, string[]>>,
+    engine_options: raw.engine_options as string[],
+  }));
+
+  const allItems = apiData?.items ?? COMPAT_ITEMS;
+  const vehicleCatalog = apiData?.vehicle_catalog ?? VEHICLE_CATALOG;
+  const engineOptions = apiData?.engine_options ?? ENGINE_OPTIONS;
+
+  const marcas = Object.keys(vehicleCatalog).sort();
 
   const [marca, setMarca]         = useState("");
   const [modelo, setModelo]       = useState("");
@@ -55,14 +67,14 @@ export default function Compatibilidade() {
   const [page, setPage]         = useState(1);
   const [applying, setApplying] = useState(false);
 
-  const modelos = marca ? Object.keys(VEHICLE_CATALOG[marca]).sort() : [];
-  const anos    = modelo && marca ? VEHICLE_CATALOG[marca][modelo] : [];
+  const modelos = marca ? Object.keys(vehicleCatalog[marca] ?? {}).sort() : [];
+  const anos    = modelo && marca ? (vehicleCatalog[marca]?.[modelo] ?? []) : [];
 
   const base = useMemo(() =>
     selectedAccountId
-      ? COMPAT_ITEMS.filter(i => i.accountId === selectedAccountId)
-      : COMPAT_ITEMS,
-    [selectedAccountId]
+      ? allItems.filter(i => i.accountId === selectedAccountId)
+      : allItems,
+    [selectedAccountId, allItems]
   );
 
   const filtered = useMemo(() => {
@@ -213,7 +225,7 @@ export default function Compatibilidade() {
                 <SelectValue placeholder="Todos os motores" />
               </SelectTrigger>
               <SelectContent>
-                {ENGINE_OPTIONS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                {engineOptions.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
