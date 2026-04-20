@@ -9,6 +9,8 @@ import {
   CheckCircle, Clock, AlertCircle, Wrench, Check, ChevronLeft, ChevronRight, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useApiData } from "@/hooks/useApiData";
+import { transformCorrections } from "@/lib/transforms";
 
 type Status = "pending" | "approved" | "applied";
 type TypeFilter = "all" | "compat" | "specs" | "ean" | "price" | "title";
@@ -56,10 +58,14 @@ export default function Correcoes() {
   const [localStatuses, setLocalStatuses] = useState<Record<string, Status>>({});
   const [page, setPage] = useState(1);
 
+  const { data: apiCorrections } = useApiData("/corrections?per_page=10000", null, (raw) =>
+    transformCorrections(raw.corrections ?? [])
+  );
+
   const TYPE_MAP: Record<string, string> = {
-    specs_fill: "specs", specs_hidden: "specs",
-    ean_fill: "ean", compat_fill: "compat",
-    title_optimize: "title", price_adjust: "price",
+    specs_fill: "specs", specs_hidden: "specs", specs: "specs",
+    ean_fill: "ean", ean: "ean", compat_fill: "compat", compat: "compat",
+    title_optimize: "title", title: "title", price_adjust: "price", price: "price",
   };
   const STATUS_MAP_RAW: Record<string, Status> = {
     pending: "pending", approved: "approved",
@@ -67,6 +73,22 @@ export default function Correcoes() {
   };
 
   const base = useMemo(() => {
+    if (apiCorrections) {
+      const raw = selectedAccountId
+        ? apiCorrections.filter((c: any) => c.accountId === selectedAccountId)
+        : apiCorrections;
+      return raw.map((c: any) => ({
+        id: String(c.id),
+        itemId: c.itemId,
+        title: c.itemTitle ?? "",
+        accountId: c.accountId,
+        accountName: c.accountName,
+        type: TYPE_MAP[c.type] ?? "specs",
+        from: c.oldValue ?? "",
+        to: c.newValue ?? "",
+        status: STATUS_MAP_RAW[c.status] ?? "pending",
+      }));
+    }
     const raw = selectedAccountId
       ? CORRECTIONS.filter(c => c.accountId === selectedAccountId)
       : CORRECTIONS;
@@ -82,7 +104,7 @@ export default function Correcoes() {
       status: STATUS_MAP_RAW[(c.status as string)] ?? "pending",
     }));
   }, // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedAccountId]
+    [selectedAccountId, apiCorrections]
   );
 
   const filtered = useMemo(() => {

@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select";
 import { ITEMS } from "@/mock/data";
 import { Search, ExternalLink, Wrench, Car, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { useApiData } from "@/hooks/useApiData";
+import { transformItems } from "@/lib/transforms";
 
 type SortKey = "score_asc" | "score_desc" | "sales_desc" | "specs_desc";
 
@@ -40,9 +42,14 @@ export default function SaudeAnuncios() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
+  const { data: apiItems } = useApiData("/items?per_page=10000", null, (raw) =>
+    transformItems(raw.items ?? [])
+  );
+  const allItems = apiItems ?? ITEMS;
+
   const base = useMemo(() => {
-    return selectedAccountId ? ITEMS.filter(i => i.accountId === selectedAccountId) : ITEMS;
-  }, [selectedAccountId]);
+    return selectedAccountId ? allItems.filter(i => i.accountId === selectedAccountId) : allItems;
+  }, [selectedAccountId, allItems]);
 
   const filterCounts = useMemo(() => ({
     all: base.length,

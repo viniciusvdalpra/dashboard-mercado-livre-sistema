@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { Truck, DollarSign, Package, AlertTriangle, Download } from "lucide-react";
+import { useApiData } from "@/hooks/useApiData";
 
 const THRESHOLDS = { ok: 10, warn: 18 };
 
@@ -37,6 +38,8 @@ export default function Frete() {
     return f && valid.includes(f) ? f : "all";
   });
 
+  const { data: apiFreight } = useApiData("/freight", null);
+
   const base = useMemo(() =>
     selectedAccountId ? FREIGHT_ITEMS.filter(i => i.accountId === selectedAccountId) : FREIGHT_ITEMS,
     [selectedAccountId]
@@ -60,11 +63,17 @@ export default function Frete() {
     }
   }, [base, activeFilter]);
 
-  const totalCost  = base.reduce((s, i) => s + i.freightCost, 0);
-  const avgPct     = base.length ? base.reduce((s, i) => s + i.freightPercent, 0) / base.length : 0;
+  const totalCost  = apiFreight ? apiFreight.total_freight_cost : base.reduce((s, i) => s + i.freightCost, 0);
+  const avgPct     = apiFreight ? apiFreight.freight_percent : (base.length ? base.reduce((s, i) => s + i.freightPercent, 0) / base.length : 0);
   const freeCount  = base.filter(i => i.freeShipping).length;
 
   const accountChart = useMemo(() => {
+    if (apiFreight?.by_account?.length) {
+      return apiFreight.by_account.map((a: any) => ({
+        name: a.account_name?.split(" ")[0] ?? a.account_slug,
+        ratio: a.freight_percent ?? 0,
+      }));
+    }
     const map: Record<string, { name: string; total: number; count: number }> = {};
     base.forEach(i => {
       const k = String(i.accountId);
@@ -76,7 +85,7 @@ export default function Frete() {
       name: v.name,
       ratio: +(v.count > 0 ? v.total / v.count : 0).toFixed(1),
     }));
-  }, [base]);
+  }, [base, apiFreight]);
 
   return (
     <Layout>

@@ -8,6 +8,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import { Package, AlertTriangle, Clock, Archive, Download, ShoppingCart } from "lucide-react";
+import { useApiData } from "@/hooks/useApiData";
+import { transformStockItems } from "@/lib/transforms";
 
 type StockFilter = "all" | "ruptura" | "lt30" | "30to60" | "60to90" | "gt90" | "parado";
 
@@ -36,9 +38,14 @@ export default function Estoque() {
     return f && valid.includes(f) ? f : "all";
   });
 
+  const { data: apiStock } = useApiData("/stock?per_page=10000", null, (raw) =>
+    transformStockItems(raw.items ?? [])
+  );
+  const allStock = apiStock ?? STOCK_ITEMS;
+
   const base = useMemo(() =>
-    selectedAccountId ? STOCK_ITEMS.filter(i => i.accountId === selectedAccountId) : STOCK_ITEMS,
-    [selectedAccountId]
+    selectedAccountId ? allStock.filter(i => i.accountId === selectedAccountId) : allStock,
+    [selectedAccountId, allStock]
   );
 
   const counts = useMemo(() => ({

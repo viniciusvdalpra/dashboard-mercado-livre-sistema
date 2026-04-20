@@ -5,6 +5,8 @@ import { useGlobalContext } from "@/contexts/useGlobalContext";
 import {
   ACCOUNTS, DASHBOARD_KPIS, PROBLEMS, DAILY_SALES,
 } from "@/mock/data";
+import { useApiData } from "@/hooks/useApiData";
+import { transformAccounts, transformKpis, transformProblems, transformSalesChart } from "@/lib/transforms";
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
@@ -171,7 +173,7 @@ const ACCOUNT_LINES = [
 
 const TOTAL_LINE = { shortName: "Total", color: "#1f2937", qtyKey: "qty", revKey: "revenue" } as const;
 
-function SalesChart({ data }: { data: typeof DAILY_SALES }) {
+function SalesChart({ data }: { data: typeof DAILY_SALES | any[] }) {
   const [period, setPeriod] = useState(30);
   const [mode, setMode] = useState<"qty" | "revenue">("qty");
   const { selectedAccountId } = useGlobalContext();
@@ -332,6 +334,21 @@ const SEVERITY_STYLES: Record<string, string> = {
 export default function DashboardGeral() {
   const { selectedAccountId } = useGlobalContext();
 
+  const { data: dashData } = useApiData("/dashboard/v2", null, (raw) => ({
+    accounts: transformAccounts(raw.accounts ?? []),
+    kpis: transformKpis(raw.kpis ?? {}),
+    problems: transformProblems(raw.recent_problems ?? []),
+  }));
+
+  const { data: salesData } = useApiData("/dashboard/sales-chart?days=180", null, (raw) =>
+    transformSalesChart(raw ?? [])
+  );
+
+  const accounts = dashData?.accounts ?? ACCOUNTS;
+  const kpis = dashData?.kpis ?? DASHBOARD_KPIS;
+  const problems = dashData?.problems ?? PROBLEMS;
+  const dailySales = salesData ?? DAILY_SALES;
+
   return (
     <Layout>
       {/* ── Action bar ── */}
@@ -350,7 +367,7 @@ export default function DashboardGeral() {
       {/* ── Faturamento por período (5 cards) ── */}
       <div className="grid grid-cols-5 gap-3 mb-6">
         {([7, 15, 30, 60, 90] as const).map(d => (
-          <RevPeriodCard key={d} days={d} data={DAILY_SALES} selectedAccountId={selectedAccountId} />
+          <RevPeriodCard key={d} days={d} data={dailySales} selectedAccountId={selectedAccountId} />
         ))}
       </div>
 
@@ -358,28 +375,28 @@ export default function DashboardGeral() {
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <KpiCard
           label="Score médio"
-          value={`${DASHBOARD_KPIS.avgScore}/100`}
+          value={`${kpis.avgScore}/100`}
           icon={<Star className="h-4 w-4" />}
           trend={{ value: 2.1, isPositive: false }}
         />
         <KpiCard
           label="Itens c/ problema"
-          value={DASHBOARD_KPIS.itemsWithProblem}
+          value={kpis.itemsWithProblem}
           icon={<AlertTriangle className="h-4 w-4" />}
           trend={{ value: 4.2, isPositive: false }}
           href="/saude?filter=unhealthy"
           variant="alert"
         />
-        <KpiCard label="Compat. pendentes" value={DASHBOARD_KPIS.compatPending}        icon={<Car className="h-4 w-4" />}     href="/saude?filter=compat"   variant="warn" />
-        <KpiCard label="Ficha técnica %"   value={`${DASHBOARD_KPIS.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs"   variant="warn" />
-        <KpiCard label="Frete / vendas"    value={`${DASHBOARD_KPIS.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}  href="/frete?filter=danger" />
-        <KpiCard label="Estoque em risco"  value={DASHBOARD_KPIS.stockRisk}            icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30"   variant="warn" />
+        <KpiCard label="Compat. pendentes" value={kpis.compatPending}        icon={<Car className="h-4 w-4" />}     href="/saude?filter=compat"   variant="warn" />
+        <KpiCard label="Ficha técnica %"   value={`${kpis.specsFillRate}%`}  icon={<FileText className="h-4 w-4" />} href="/saude?filter=specs"   variant="warn" />
+        <KpiCard label="Frete / vendas"    value={`${kpis.freightOverSales}%`} icon={<Truck className="h-4 w-4" />}  href="/frete?filter=danger" />
+        <KpiCard label="Estoque em risco"  value={kpis.stockRisk}            icon={<Package className="h-4 w-4" />} href="/estoque?filter=lt30"   variant="warn" />
       </div>
 
       {/* ── Chart + Problems ── */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 mb-6" style={{ height: 400 }}>
         <div className="xl:col-span-3 h-full">
-          <SalesChart data={DAILY_SALES} />
+          <SalesChart data={dailySales} />
         </div>
         <div
           className="bg-white rounded-2xl p-5 border border-border flex flex-col h-full min-h-0 overflow-hidden"
@@ -388,7 +405,7 @@ export default function DashboardGeral() {
           <h3 className="font-bold text-sm text-foreground mb-4 flex-shrink-0">Problemas Ativos</h3>
           <div className="flex-1 min-h-0 overflow-hidden">
             <div className="h-full overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-              {PROBLEMS.map((p, i) => {
+              {problems.map((p, i) => {
                 const countSize =
                   p.count >= 100 ? "text-[22px]" :
                   p.count >= 50  ? "text-[19px]" :
@@ -413,7 +430,7 @@ export default function DashboardGeral() {
       <div>
         <h2 className="text-sm font-bold text-foreground mb-3">Desempenho por Conta</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {ACCOUNTS.map(acc => <AccountCard key={acc.id} account={acc} />)}
+          {accounts.map(acc => <AccountCard key={acc.id} account={acc} />)}
         </div>
       </div>
     </Layout>

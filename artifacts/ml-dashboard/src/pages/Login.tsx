@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { useLocation } from "wouter";
 import { Store, TrendingUp, ArrowUpRight } from "lucide-react";
+import { api, IS_MOCK, setToken } from "@/lib/api";
 
 const STATS = [
   { value: "15.284", label: "Anúncios ativos", up: true },
@@ -17,14 +18,31 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) return;
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+
+    if (IS_MOCK) {
+      setTimeout(() => {
+        setIsLoggedIn(true);
+        setLocation("/");
+      }, 500);
+      return;
+    }
+
+    try {
+      const res = await api.post<{ access_token: string }>("/auth/login", { username, password });
+      setToken(res.access_token);
       setIsLoggedIn(true);
       setLocation("/");
-    }, 500);
+    } catch {
+      setError("Credenciais inválidas. Tente novamente.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -116,6 +134,7 @@ export default function Login() {
             </p>
           </div>
 
+          {error && <p className="text-sm text-red-600 text-center mb-4">{error}</p>}
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="username">

@@ -5,6 +5,8 @@ import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
 import { SALES_PROFITABILITY, type SaleProfitability } from "@/mock/data";
 import { TrendingUp, Download, ChevronDown, ChevronUp, ChevronsUpDown, Truck, Megaphone, Receipt } from "lucide-react";
+import { useApiData } from "@/hooks/useApiData";
+import { transformProfitability } from "@/lib/transforms";
 
 const BRL = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 });
@@ -33,21 +35,26 @@ export default function Lucratividade() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const { data: apiProf } = useApiData("/profitability?per_page=10000", null, (raw) =>
+    transformProfitability(raw.items ?? [])
+  );
+  const allProf = apiProf ?? SALES_PROFITABILITY;
+
   const cutoff = useMemo(() => {
-    const d = new Date(2026, 3, 8);
+    const d = new Date();
     d.setDate(d.getDate() - period);
     return d;
   }, [period]);
 
   const base = useMemo(() => {
-    return SALES_PROFITABILITY.filter(s => {
+    return (allProf as SaleProfitability[]).filter(s => {
       const [day, month, year] = s.date.split("/").map(Number);
       const saleDate = new Date(year, month - 1, day);
       if (saleDate < cutoff) return false;
       if (selectedAccountId && s.accountId !== selectedAccountId) return false;
       return true;
     });
-  }, [cutoff, selectedAccountId]);
+  }, [cutoff, selectedAccountId, allProf]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return base;

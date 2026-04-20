@@ -9,6 +9,8 @@ import {
   Send, CheckCircle, Search, ChevronLeft, ChevronRight, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useApiData } from "@/hooks/useApiData";
+import { transformPrices } from "@/lib/transforms";
 
 type PriceFilter = "all" | "below_min" | "above_max" | "no_competitors" | "queued";
 
@@ -41,9 +43,14 @@ export default function Precos() {
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
 
+  const { data: apiPrices } = useApiData("/prices?per_page=10000", null, (raw) =>
+    transformPrices(raw.prices ?? [])
+  );
+  const allPrices = apiPrices ?? PRICE_ITEMS;
+
   const base = useMemo(() =>
-    selectedAccountId ? PRICE_ITEMS.filter(i => i.accountId === selectedAccountId) : PRICE_ITEMS,
-    [selectedAccountId]
+    selectedAccountId ? allPrices.filter(i => i.accountId === selectedAccountId) : allPrices,
+    [selectedAccountId, allPrices]
   );
 
   const filtered = useMemo(() => {
