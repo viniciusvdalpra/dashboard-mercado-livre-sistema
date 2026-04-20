@@ -17,53 +17,80 @@ export function transformAccounts(apiAccounts: any[]) {
     id: SLUG_TO_ID[a.slug] ?? 0,
     name: SLUG_TO_NAME[a.slug] ?? a.name,
     slug: a.slug,
-    level: a.reputation_level ?? "5_green",
-    powerSeller: a.power_seller_status ?? "gold",
-    claimsRate: a.claims_rate ?? 0,
-    cancellationsRate: a.cancellations_rate ?? 0,
-    delayedRate: a.delayed_rate ?? 0,
-    salesYesterday: Math.round((a.orders_d30 ?? 0) / 30),
-    salesTarget: Math.round((a.orders_d30 ?? 0) / 30 * 1.1),
-    revenue30d: a.revenue_d30 ?? 0,
-    orders30d: a.orders_d30 ?? 0,
-    pendingDispatch: 0,
+    // ML: reputation.level_id → ex: "5_green"
+    level: a.reputation_level ?? a.level ?? "5_green",
+    // ML: reputation.power_seller_status → ex: "platinum"
+    powerSeller: a.power_seller_status ?? a.powerSeller ?? "gold",
+    // ML: reputation.metrics.claims.rate
+    claimsRate: a.claims_rate ?? a.claimsRate ?? 0,
+    // ML: reputation.metrics.cancellations.rate
+    cancellationsRate: a.cancellations_rate ?? a.cancellationsRate ?? 0,
+    // ML: reputation.metrics.delayed_handling_time.rate
+    delayedRate: a.delayed_rate ?? a.delayedRate ?? 0,
+    // ML: pedidos ontem — fallback: média do mês
+    salesYesterday: a.orders_yesterday ?? a.sales_yesterday ?? Math.round((a.orders_d30 ?? 0) / 30),
+    // DB: meta configurável por conta — fallback: +10% da média
+    salesTarget: a.sales_target ?? a.salesTarget ?? Math.round((a.orders_d30 ?? 0) / 30 * 1.1),
+    revenue30d: a.revenue_d30 ?? a.revenue30d ?? 0,
+    orders30d: a.orders_d30 ?? a.orders30d ?? 0,
+    // ML: pedidos com order_status=paid e shipping_status=handling
+    pendingDispatch: a.pending_dispatch ?? a.pendingDispatch ?? 0,
+    // ML: anúncios com health.status=unhealthy
     unhealthy: a.unhealthy ?? 0,
+    // ML: anúncios com health.status=warning
     warning: a.warning ?? 0,
   }));
 }
 
 export function transformKpis(apiKpis: any) {
   return {
-    totalOrders30d: apiKpis.orders_d30 ?? 0,
-    totalRevenue30d: apiKpis.revenue_d30 ?? 0,
-    avgScore: Math.round(apiKpis.avg_score ?? 0),
-    itemsWithProblem: (apiKpis.unhealthy ?? 0) + (apiKpis.warning ?? 0),
-    compatPending: 0,
-    specsFillRate: Math.round(apiKpis.specs_avg ?? 0),
-    freightOverSales: 0,
-    stockRisk: 0,
+    totalOrders30d: apiKpis.orders_d30 ?? apiKpis.totalOrders30d ?? 0,
+    totalRevenue30d: apiKpis.revenue_d30 ?? apiKpis.totalRevenue30d ?? 0,
+    // ML: média ponderada do score de saúde
+    avgScore: Math.round(apiKpis.avg_score ?? apiKpis.avgScore ?? 0),
+    // ML: unhealthy + warning
+    itemsWithProblem: apiKpis.items_with_problem ?? apiKpis.itemsWithProblem ?? (apiKpis.unhealthy ?? 0) + (apiKpis.warning ?? 0),
+    // ML: anúncios com compatibility_status=pending_suggestions
+    compatPending: apiKpis.compat_pending ?? apiKpis.compatPending ?? 0,
+    // ML: % de atributos obrigatórios preenchidos
+    specsFillRate: Math.round(apiKpis.specs_fill_rate ?? apiKpis.specs_avg ?? apiKpis.specsFillRate ?? 0),
+    // CALC: (custo_frete_total / faturamento_total) * 100
+    freightOverSales: apiKpis.freight_over_sales ?? apiKpis.freightOverSales ?? 0,
+    // CALC: itens com cobertura < 15 dias
+    stockRisk: apiKpis.stock_risk ?? apiKpis.stockRisk ?? 0,
   };
 }
 
+const PROBLEM_LABELS: Record<string, string> = {
+  compat: "Compatibilidades pendentes",
+  dispatch: "Despacho atrasado",
+  unhealthy: "Anúncios unhealthy",
+  claims: "Reclamações abertas",
+  warning: "Anúncios em warning",
+  stock: "Risco de ruptura",
+  returns: "Devoluções recorrentes",
+  infractions: "Infrações ativas",
+  negative_tags: "Tags negativas",
+  low_score: "Score baixo",
+  missing_specs: "Ficha incompleta",
+  no_ean: "Sem EAN",
+  stock_risk: "Risco de ruptura",
+};
+
 export function transformProblems(apiProblems: any[]) {
-  // Group by type and count
-  const counts: Record<string, { count: number; severity: string; label: string }> = {};
-  const typeLabels: Record<string, string> = {
-    negative_tags: "Tags negativas",
-    low_score: "Score baixo",
-    missing_specs: "Ficha incompleta",
-    no_ean: "Sem EAN",
-    unhealthy: "Anúncios unhealthy",
-    stock_risk: "Risco de ruptura",
-    compat: "Compatibilidades pendentes",
-  };
-  apiProblems.forEach(p => {
-    const t = p.type ?? "other";
-    if (!counts[t]) counts[t] = { count: 0, severity: p.severity ?? "yellow", label: typeLabels[t] ?? t };
-    counts[t].count++;
-  });
-  return Object.entries(counts)
-    .map(([type, v]) => ({ type, label: v.label, count: v.count, severity: v.severity === "critical" ? "red" : v.severity === "warning" ? "yellow" : "green" }))
+  // API returns pre-aggregated problems with a count field each
+  // Shape: [{ type, label, count, severity }]
+  return apiProblems
+    .map(p => ({
+      type: p.type,
+      label: p.label ?? PROBLEM_LABELS[p.type] ?? p.type,
+      count: p.count ?? 1,
+      severity: p.severity === "critical" || p.severity === "red"
+        ? "red"
+        : p.severity === "warning" || p.severity === "yellow"
+        ? "yellow"
+        : "yellow",
+    }))
     .sort((a, b) => b.count - a.count);
 }
 
