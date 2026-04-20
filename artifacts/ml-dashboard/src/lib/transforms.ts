@@ -69,16 +69,32 @@ export function transformProblems(apiProblems: any[]) {
 
 export function transformSalesChart(apiData: any[]) {
   return apiData.map(d => {
-    const dateStr = d.date; // "2025-12-08" format
-    const parts = dateStr.split("-");
-    const formatted = `${parts[2]}/${parts[1]}`; // "08/12"
+    // Date can come as "2025-12-08" (ISO) or "08/12" (already formatted)
+    let formatted = d.date as string;
+    if (formatted && formatted.includes("-")) {
+      const parts = formatted.split("-");
+      formatted = `${parts[2]}/${parts[1]}`;
+    }
+
+    const qty = d.qty ?? d.orders ?? 0;
     const revenue = d.revenue ?? 0;
-    const qty = d.orders ?? 0;
+
+    // Per-account breakdown — backend may send qty_1..4 directly or via account slugs
+    const qty_1 = d.qty_1 ?? d.orders_toyo ?? 0;
+    const qty_2 = d.qty_2 ?? d.orders_sac  ?? 0;
+    const qty_3 = d.qty_3 ?? d.orders_oficial ?? 0;
+    const qty_4 = d.qty_4 ?? d.orders_denzel  ?? 0;
+
+    const revenue_1 = d.revenue_1 ?? d.revenue_toyo   ?? 0;
+    const revenue_2 = d.revenue_2 ?? d.revenue_sac    ?? 0;
+    const revenue_3 = d.revenue_3 ?? d.revenue_oficial ?? 0;
+    const revenue_4 = d.revenue_4 ?? d.revenue_denzel  ?? 0;
+
     return {
       date: formatted,
-      qty_1: 0, qty_2: 0, qty_3: 0, qty_4: 0,
+      qty_1, qty_2, qty_3, qty_4,
       qty,
-      revenue_1: 0, revenue_2: 0, revenue_3: 0, revenue_4: 0,
+      revenue_1, revenue_2, revenue_3, revenue_4,
       revenue,
     };
   });
