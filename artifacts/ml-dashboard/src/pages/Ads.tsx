@@ -1,18 +1,40 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
 import { useGlobalContext } from "@/contexts/useGlobalContext";
-import { CAMPAIGNS, ADS_METRICS, type Campaign } from "@/mock/data";
+import { api } from "@/lib/api";
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
 } from "recharts";
 import {
   DollarSign, TrendingUp, MousePointerClick, BarChart2,
-  ChevronDown, ChevronRight, Download, TrendingDown,
-  AlertTriangle, CheckCircle2, Zap, Eye,
+  Download, Eye, Info, Search, ChevronLeft, ChevronRight,
 } from "lucide-react";
+
+// ── types ─────────────────────────────────────────────────────────────────────
+
+interface AdsItemRaw {
+  ml_item_id: string;
+  title: string;
+  account_slug: string;
+  spend_d30: number;
+  revenue_d30: number;
+  roas: number;
+  clicks_d30: number;
+  impressions_d30: number;
+  ctr: number;
+  is_grant: boolean;
+}
+
+interface AdsSummaryRaw {
+  total_spend: number;
+  total_revenue: number;
+  avg_roas: number;
+  grant_items: number;
+  items: AdsItemRaw[];
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,290 +43,105 @@ function brl(v: number) {
 }
 function num(v: number) { return v.toLocaleString("pt-BR"); }
 
-const DIAG_STYLE: Record<string, string> = {
-  excelente: "bg-teal-50 text-teal-700 border-teal-200",
-  bom:       "bg-blue-50 text-blue-700 border-blue-200",
-  regular:   "bg-amber-50 text-amber-700 border-amber-200",
-  ruim:      "bg-red-50 text-red-700 border-red-200",
-};
-const DIAG_LABEL: Record<string, string> = {
-  excelente: "Excelente",
-  bom:       "Bom",
-  regular:   "Regular",
-  ruim:      "Ruim",
-};
-const DIAG_COLORS: Record<string, string> = {
-  excelente: "#0d9488",
-  bom:       "#3b82f6",
-  regular:   "#f59e0b",
-  ruim:      "#ef4444",
-};
-
-function roasBadge(roas: number, target: number) {
-  const r = roas / target;
-  if (r >= 1)   return "bg-teal-50 text-teal-700 border-teal-200";
-  if (r >= 0.7) return "bg-amber-50 text-amber-700 border-amber-200";
+function roasBadge(roas: number) {
+  if (roas >= 5) return "bg-teal-50 text-teal-700 border-teal-200";
+  if (roas >= 2) return "bg-blue-50 text-blue-700 border-blue-200";
+  if (roas >= 1) return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-red-50 text-red-700 border-red-200";
 }
 
-// ── Win-rate donut ────────────────────────────────────────────────────────────
-
-function WinRateDonut({ campaign }: { campaign: Campaign }) {
-  const data = [
-    { name: "Ganhas",                    value: campaign.winRate,     color: "#0d9488" },
-    { name: "Perdidas p/ orçamento",     value: campaign.lostBudget,  color: "#f97316" },
-    { name: "Perdidas p/ classificação", value: campaign.lostRanking, color: "#94a3b8" },
-  ];
-  return (
-    <div className="flex items-center gap-4 py-2">
-      <ResponsiveContainer width={80} height={80}>
-        <PieChart>
-          <Pie data={data} dataKey="value" innerRadius={24} outerRadius={36}
-            startAngle={90} endAngle={-270} strokeWidth={0}>
-            {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-          </Pie>
-          <ReTooltip contentStyle={{ fontSize: 11, borderRadius: 8 }}
-            formatter={(v: number) => [`${v}%`]} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-          Competição por impressões
-        </p>
-        {data.map(d => (
-          <div key={d.name} className="flex items-center gap-2 text-xs">
-            <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
-            <span className="text-muted-foreground">{d.name}</span>
-            <span className="font-semibold text-foreground ml-auto">{d.value}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Campaign row (in Campanhas tab) ──────────────────────────────────────────
-
-function CampaignRow({
-  campaign, isExpanded, onToggle,
-}: { campaign: Campaign; isExpanded: boolean; onToggle: () => void }) {
-  const [active, setActive] = useState(campaign.status === "active");
-  const relatedAds = useMemo(
-    () => ADS_METRICS.filter(a => a.accountId === campaign.accountId).slice(0, campaign.adsCount),
-    [campaign],
-  );
-
-  return (
-    <>
-      <tr
-        className={`cursor-pointer border-b border-border transition-colors ${isExpanded ? "bg-teal-50/40" : "hover:bg-muted/30"}`}
-        onClick={onToggle}
-      >
-        {/* Toggle */}
-        <td className="px-4 py-3.5 w-12" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => setActive(p => !p)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${active ? "bg-teal-500" : "bg-gray-300"}`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${active ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
-          </button>
-        </td>
-        <td className="px-2 py-3.5 w-8 text-muted-foreground">
-          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </td>
-        <td className="px-3 py-3.5">
-          <p className="font-semibold text-sm text-foreground">{campaign.name}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {campaign.adsCount} anúncio(s) · {campaign.accountName}
-          </p>
-        </td>
-        <td className="px-4 py-3.5">
-          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${DIAG_STYLE[campaign.diagnosis]}`}>
-            {DIAG_LABEL[campaign.diagnosis]}
-          </span>
-        </td>
-        <td className="px-4 py-3.5 text-sm text-foreground">{brl(campaign.dailyBudget)}</td>
-        <td className="px-4 py-3.5 text-sm text-muted-foreground">{campaign.roasTarget}x</td>
-        <td className="px-4 py-3.5">
-          <span className={`text-xs font-bold px-2 py-1 rounded-lg border ${roasBadge(campaign.roas, campaign.roasTarget)}`}>
-            {campaign.roas.toFixed(2)}x
-          </span>
-        </td>
-        <td className="px-4 py-3.5 text-sm">
-          <span className={campaign.acos > 30 ? "text-red-600 font-semibold" : campaign.acos > 20 ? "text-amber-600 font-semibold" : "text-teal-700 font-semibold"}>
-            {campaign.acos.toFixed(1)}%
-          </span>
-        </td>
-        <td className="px-4 py-3.5 text-sm font-semibold text-foreground">{campaign.salesProductAds}</td>
-        <td className="px-4 py-3.5 text-sm text-muted-foreground">{num(campaign.clicks)}</td>
-        <td className="px-4 py-3.5 text-sm text-muted-foreground">{num(campaign.impressions)}</td>
-      </tr>
-
-      {/* Expanded panel */}
-      {isExpanded && (
-        <tr className="border-b border-border">
-          <td colSpan={11} className="p-0">
-            <div className="bg-teal-50/20 px-8 py-5 border-t border-teal-100">
-              <div className="flex gap-8">
-                <div className="bg-white rounded-xl border border-border p-4 flex-shrink-0"
-                  style={{ minWidth: 260, boxShadow: "0 1px 3px rgb(0 0 0 / .05)" }}>
-                  <WinRateDonut campaign={campaign} />
-                </div>
-                <div className="flex-1 min-w-0 bg-white rounded-xl border border-border overflow-hidden"
-                  style={{ boxShadow: "0 1px 3px rgb(0 0 0 / .05)" }}>
-                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                    <p className="text-xs font-semibold text-foreground">Anúncios desta campanha</p>
-                    <span className="text-[10px] text-muted-foreground">{campaign.adsCount} item(s)</span>
-                  </div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ background: "hsl(var(--muted))" }} className="border-b border-border">
-                        <th className="px-4 py-2 text-left font-semibold text-muted-foreground uppercase tracking-wide">Título</th>
-                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground uppercase tracking-wide">Impressões</th>
-                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground uppercase tracking-wide">Cliques</th>
-                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground uppercase tracking-wide">ROAS</th>
-                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground uppercase tracking-wide">Custo/clique</th>
-                        <th className="px-3 py-2 text-right font-semibold text-muted-foreground uppercase tracking-wide">Vendas Ads</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {relatedAds.map(ad => (
-                        <tr key={ad.id} className="hover:bg-muted/20">
-                          <td className="px-4 py-2.5">
-                            <p className="font-medium text-foreground truncate max-w-[260px]">{ad.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{ad.id}</p>
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-muted-foreground">{num(ad.impressions)}</td>
-                          <td className="px-3 py-2.5 text-right text-muted-foreground">{num(ad.clicks)}</td>
-                          <td className="px-3 py-2.5 text-right">
-                            <span className={`font-bold px-1.5 py-0.5 rounded-md border text-[10px] ${roasBadge(ad.roas, campaign.roasTarget)}`}>
-                              {ad.roas.toFixed(1)}x
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-muted-foreground">
-                            {ad.cpc.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-teal-700">{ad.directUnits}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
+const PAGE_SIZE = 25;
 
 // ── Visão Geral tab ───────────────────────────────────────────────────────────
 
-function VisaoGeral({ campaigns }: { campaigns: Campaign[] }) {
-  const summary = useMemo(() => ({
-    cost:        campaigns.reduce((s, c) => s + c.cost, 0),
-    revenue:     campaigns.reduce((s, c) => s + c.revenue, 0),
-    clicks:      campaigns.reduce((s, c) => s + c.clicks, 0),
-    impressions: campaigns.reduce((s, c) => s + c.impressions, 0),
-    salesAds:    campaigns.reduce((s, c) => s + c.salesProductAds, 0),
-    roas: campaigns.reduce((s, c) => s + c.cost, 0) > 0
-      ? campaigns.reduce((s, c) => s + c.revenue, 0) / campaigns.reduce((s, c) => s + c.cost, 0)
-      : 0,
-    acos: campaigns.reduce((s, c) => s + c.revenue, 0) > 0
-      ? (campaigns.reduce((s, c) => s + c.cost, 0) / campaigns.reduce((s, c) => s + c.revenue, 0)) * 100
-      : 0,
-  }), [campaigns]);
-
-  const diagData = useMemo(() => {
-    const counts: Record<string, number> = { excelente: 0, bom: 0, regular: 0, ruim: 0 };
-    campaigns.forEach(c => counts[c.diagnosis]++);
-    return Object.entries(counts)
-      .filter(([, v]) => v > 0)
-      .map(([k, v]) => ({ name: DIAG_LABEL[k], value: v, color: DIAG_COLORS[k] }));
-  }, [campaigns]);
+function VisaoGeral({ data }: { data: AdsSummaryRaw }) {
+  const { items } = data;
 
   const roasChartData = useMemo(() =>
-    campaigns
+    items
       .slice()
       .sort((a, b) => b.roas - a.roas)
       .slice(0, 10)
-      .map(c => ({
-        name: c.name.length > 22 ? c.name.slice(0, 22) + "…" : c.name,
-        roas: c.roas,
-        target: c.roasTarget,
-        fill: c.roas >= c.roasTarget ? "#0d9488" : c.roas >= c.roasTarget * 0.7 ? "#f59e0b" : "#ef4444",
+      .map(item => ({
+        name: item.title.length > 28 ? item.title.slice(0, 28) + "…" : item.title,
+        roas: item.roas,
+        fill: item.roas >= 5 ? "#0d9488" : item.roas >= 2 ? "#3b82f6" : item.roas >= 1 ? "#f59e0b" : "#ef4444",
       })),
-    [campaigns],
+    [items],
   );
 
-  const recos = useMemo(() => {
-    const out: { icon: React.ReactNode; color: string; title: string; desc: string }[] = [];
-    const highAcos = campaigns.filter(c => c.acos > 50 && c.status === "active");
-    if (highAcos.length)
-      out.push({ icon: <AlertTriangle className="h-4 w-4" />, color: "red",
-        title: `${highAcos.length} campanha(s) com ACOS > 50%`,
-        desc: `${highAcos.map(c => c.name).slice(0, 2).join(", ")} — revisar lances ou pausar` });
+  const grantData = useMemo(() => {
+    const grant = items.filter(i => i.is_grant).length;
+    const paid = items.length - grant;
+    if (!items.length) return [];
+    return [
+      { name: "Grant (bonificado)", value: grant, color: "#0d9488" },
+      { name: "Pago", value: paid, color: "#3b82f6" },
+    ].filter(d => d.value > 0);
+  }, [items]);
 
-    const lostBudget = campaigns.filter(c => c.lostBudget > 10 && c.status === "active");
-    if (lostBudget.length)
-      out.push({ icon: <TrendingDown className="h-4 w-4" />, color: "amber",
-        title: `${lostBudget.length} campanha(s) perdendo impressões por orçamento`,
-        desc: `Aumentar budget diário em ${lostBudget.map(c => c.name).slice(0, 2).join(", ")}` });
+  const totalClicks = items.reduce((s, i) => s + i.clicks_d30, 0);
+  const totalImpressions = items.reduce((s, i) => s + i.impressions_d30, 0);
 
-    const overTarget = campaigns.filter(c => c.roas >= c.roasTarget * 1.3 && c.status === "active");
-    if (overTarget.length)
-      out.push({ icon: <Zap className="h-4 w-4" />, color: "teal",
-        title: `${overTarget.length} campanha(s) superando a meta de ROAS`,
-        desc: `${overTarget.map(c => c.name).slice(0, 2).join(", ")} — considere escalar o budget` });
+  if (items.length === 0) {
+    return (
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          <KpiCard accent label="Investimento" value="R$ 0" icon={<DollarSign className="h-4 w-4" />} />
+          <KpiCard label="Receita via Ads" value="R$ 0" icon={<TrendingUp className="h-4 w-4" />} />
+          <KpiCard label="ROAS geral" value="0.0x" icon={<BarChart2 className="h-4 w-4" />} />
+          <KpiCard label="ACOS geral" value="0.0%" icon={<DollarSign className="h-4 w-4" />} />
+          <KpiCard label="Grant Ads" value="0" icon={<TrendingUp className="h-4 w-4" />} />
+          <KpiCard label="Cliques" value="0" icon={<MousePointerClick className="h-4 w-4" />} />
+        </div>
 
-    const excellent = campaigns.filter(c => c.diagnosis === "excelente").length;
-    if (excellent)
-      out.push({ icon: <CheckCircle2 className="h-4 w-4" />, color: "blue",
-        title: `${excellent} campanha(s) com diagnóstico Excelente`,
-        desc: "Mantenha a estratégia atual e monitore semanalmente" });
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sm text-blue-800">Nenhum dado de Ads disponível</p>
+            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+              O coletor de métricas de Ads ainda não está ativo. Quando a coleta for configurada,
+              os dados de investimento, cliques, impressões e ROAS por anúncio aparecerão aqui automaticamente.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-    return out;
-  }, [campaigns]);
-
-  const colorMap = {
-    red:   { card: "bg-red-50 border-red-200",   icon: "bg-red-100 text-red-600",   title: "text-red-800",   desc: "text-red-600"   },
-    amber: { card: "bg-amber-50 border-amber-200", icon: "bg-amber-100 text-amber-600", title: "text-amber-800", desc: "text-amber-600" },
-    teal:  { card: "bg-teal-50 border-teal-200",  icon: "bg-teal-100 text-teal-600",  title: "text-teal-800",  desc: "text-teal-600"  },
-    blue:  { card: "bg-blue-50 border-blue-200",  icon: "bg-blue-100 text-blue-600",  title: "text-blue-800",  desc: "text-blue-600"  },
-  };
+  const acos = data.total_revenue > 0 ? (data.total_spend / data.total_revenue) * 100 : 0;
 
   return (
     <div className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         <div className="xl:col-span-1">
-          <KpiCard accent label="Investimento" value={brl(summary.cost)} icon={<DollarSign className="h-4 w-4" />} />
+          <KpiCard accent label="Investimento" value={brl(data.total_spend)} icon={<DollarSign className="h-4 w-4" />} />
         </div>
         <div className="xl:col-span-1">
-          <KpiCard label="Receita via Ads" value={brl(summary.revenue)} icon={<TrendingUp className="h-4 w-4" />} trend={{ value: 15, isPositive: true }} />
+          <KpiCard label="Receita via Ads" value={brl(data.total_revenue)} icon={<TrendingUp className="h-4 w-4" />} />
         </div>
-        <KpiCard label="ROAS geral" value={`${summary.roas.toFixed(1)}x`} icon={<BarChart2 className="h-4 w-4" />} />
-        <KpiCard label="ACOS geral" value={`${summary.acos.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} variant={summary.acos > 20 ? "alert" : summary.acos > 14 ? "warn" : "default"} />
-        <KpiCard label="Vendas via Ads" value={num(summary.salesAds)} icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard label="Cliques" value={num(summary.clicks)} icon={<MousePointerClick className="h-4 w-4" />} />
+        <KpiCard label="ROAS geral" value={`${data.avg_roas.toFixed(1)}x`} icon={<BarChart2 className="h-4 w-4" />} />
+        <KpiCard label="ACOS geral" value={`${acos.toFixed(1)}%`} icon={<DollarSign className="h-4 w-4" />} variant={acos > 20 ? "alert" : acos > 14 ? "warn" : "default"} />
+        <KpiCard label="Grant Ads" value={num(data.grant_items)} icon={<TrendingUp className="h-4 w-4" />} />
+        <KpiCard label="Cliques" value={num(totalClicks)} icon={<MousePointerClick className="h-4 w-4" />} />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-
-        {/* ROAS by campaign */}
+        {/* ROAS by item */}
         <div className="xl:col-span-2 bg-white rounded-2xl border border-border p-5"
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-bold text-sm text-foreground">ROAS por Campanha</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Real vs objetivo — top 10</p>
+              <h3 className="font-bold text-sm text-foreground">ROAS por Anúncio</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Top 10 anúncios por ROAS</p>
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-teal-500 inline-block"/>Acima da meta</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block"/>Próximo</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block"/>Abaixo</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-teal-500 inline-block"/>{">=5x"}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500 inline-block"/>{">=2x"}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block"/>{">=1x"}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block"/>{"<1x"}</span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>
@@ -314,14 +151,11 @@ function VisaoGeral({ campaigns }: { campaigns: Campaign[] }) {
                 stroke="transparent" tickFormatter={v => `${v}x`} />
               <YAxis type="category" dataKey="name"
                 tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                stroke="transparent" width={160} />
+                stroke="transparent" width={180} />
               <ReTooltip
                 contentStyle={{ background: "white", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                formatter={(v: number, _name: string, props: { payload?: { target?: number } }) => [
-                  `${v.toFixed(2)}x (meta: ${props.payload?.target ?? "?"}x)`, "ROAS",
-                ]}
+                formatter={(v: number) => [`${v.toFixed(2)}x`, "ROAS"]}
               />
-              <ReferenceLine x={0} stroke="transparent" />
               <Bar dataKey="roas" radius={[0, 6, 6, 0]} isAnimationActive={false}>
                 {roasChartData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                 <LabelList dataKey="roas" position="right"
@@ -332,180 +166,216 @@ function VisaoGeral({ campaigns }: { campaigns: Campaign[] }) {
           </ResponsiveContainer>
         </div>
 
-        {/* Diagnóstico donut */}
+        {/* Grant vs Paid donut */}
         <div className="bg-white rounded-2xl border border-border p-5 flex flex-col"
           style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
-          <h3 className="font-bold text-sm text-foreground mb-1">Saúde das Campanhas</h3>
-          <p className="text-xs text-muted-foreground mb-4">Distribuição por diagnóstico</p>
+          <h3 className="font-bold text-sm text-foreground mb-1">Tipo de Ads</h3>
+          <p className="text-xs text-muted-foreground mb-4">Grant (bonificado) vs Pago</p>
           <div className="flex-1 flex flex-col items-center justify-center">
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie data={diagData} dataKey="value" innerRadius={42} outerRadius={64}
-                  startAngle={90} endAngle={-270} strokeWidth={2} stroke="white">
-                  {diagData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <ReTooltip contentStyle={{ fontSize: 12, borderRadius: 10 }}
-                  formatter={(v: number, name: string) => [`${v} campanha(s)`, name]} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-2 w-full mt-2">
-              {diagData.map(d => (
-                <div key={d.name} className="flex items-center gap-2 text-xs">
-                  <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
-                  <span className="text-muted-foreground flex-1">{d.name}</span>
-                  <span className="font-bold text-foreground">{d.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recommendations */}
-      <div className="bg-white rounded-2xl border border-border p-5"
-        style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
-        <h3 className="font-bold text-sm text-foreground mb-4">Recomendações automáticas</h3>
-        {recos.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma recomendação no momento.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {recos.map((r, i) => {
-              const s = colorMap[r.color as keyof typeof colorMap];
-              return (
-                <div key={i} className={`rounded-xl border p-4 ${s.card}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center mb-3 ${s.icon}`}>
-                    {r.icon}
-                  </div>
-                  <p className={`text-xs font-bold leading-snug mb-1.5 ${s.title}`}>{r.title}</p>
-                  <p className={`text-[11px] leading-relaxed ${s.desc}`}>{r.desc}</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Top 3 campaigns */}
-      <div>
-        <h3 className="font-bold text-sm text-foreground mb-3">Melhores campanhas</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {campaigns
-            .filter(c => c.status === "active")
-            .sort((a, b) => b.roas - a.roas)
-            .slice(0, 3)
-            .map((c, i) => (
-              <div key={c.id}
-                className="bg-white rounded-2xl border border-border p-5 flex flex-col gap-3"
-                style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-semibold text-muted-foreground">#{i + 1} melhor ROAS</span>
-                    <p className="font-bold text-sm text-foreground mt-0.5 leading-snug">{c.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{c.accountName}</p>
-                  </div>
-                  <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border flex-shrink-0 ${DIAG_STYLE[c.diagnosis]}`}>
-                    {DIAG_LABEL[c.diagnosis]}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: "ROAS",       value: `${c.roas.toFixed(1)}x` },
-                    { label: "ACOS",       value: `${c.acos.toFixed(1)}%` },
-                    { label: "Vendas Ads", value: c.salesProductAds },
-                  ].map(m => (
-                    <div key={m.label} className="bg-muted/40 rounded-lg p-2 text-center">
-                      <p className="text-[10px] text-muted-foreground">{m.label}</p>
-                      <p className="text-xs font-bold text-foreground mt-0.5">{m.value}</p>
+            {grantData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={grantData} dataKey="value" innerRadius={42} outerRadius={64}
+                      startAngle={90} endAngle={-270} strokeWidth={2} stroke="white">
+                      {grantData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <ReTooltip contentStyle={{ fontSize: 12, borderRadius: 10 }}
+                      formatter={(v: number, name: string) => [`${v} anúncio(s)`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2 w-full mt-2">
+                  {grantData.map(d => (
+                    <div key={d.name} className="flex items-center gap-2 text-xs">
+                      <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                      <span className="text-muted-foreground flex-1">{d.name}</span>
+                      <span className="font-bold text-foreground">{d.value}</span>
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-muted-foreground flex justify-between pt-1 border-t border-border">
-                  <span>Investido: <strong className="text-foreground">{brl(c.cost)}</strong></span>
-                  <span>Receita: <strong className="text-teal-700">{brl(c.revenue)}</strong></span>
-                </div>
-              </div>
-            ))}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-10">Sem dados</p>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Top items */}
+      {items.length > 0 && (
+        <div>
+          <h3 className="font-bold text-sm text-foreground mb-3">Melhores anúncios (ROAS)</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {items
+              .slice()
+              .sort((a, b) => b.roas - a.roas)
+              .slice(0, 3)
+              .map((item, i) => (
+                <div key={item.ml_item_id}
+                  className="bg-white rounded-2xl border border-border p-5 flex flex-col gap-3"
+                  style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-semibold text-muted-foreground">#{i + 1} melhor ROAS</span>
+                      <p className="font-bold text-sm text-foreground mt-0.5 leading-snug truncate">{item.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{item.account_slug}</p>
+                    </div>
+                    <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border flex-shrink-0 ${roasBadge(item.roas)}`}>
+                      {item.roas.toFixed(1)}x
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Invest.", value: brl(item.spend_d30) },
+                      { label: "Receita", value: brl(item.revenue_d30) },
+                      { label: "CTR", value: `${item.ctr.toFixed(1)}%` },
+                    ].map(m => (
+                      <div key={m.label} className="bg-muted/40 rounded-lg p-2 text-center">
+                        <p className="text-[10px] text-muted-foreground">{m.label}</p>
+                        <p className="text-xs font-bold text-foreground mt-0.5">{m.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-xs text-muted-foreground flex justify-between pt-1 border-t border-border">
+                    <span>Cliques: <strong className="text-foreground">{num(item.clicks_d30)}</strong></span>
+                    <span>Impr.: <strong className="text-foreground">{num(item.impressions_d30)}</strong></span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Campanhas tab ─────────────────────────────────────────────────────────────
+// ── Anúncios tab (replaces Campanhas — backend has per-item data, not campaigns) ──
 
-function Campanhas({ campaigns }: { campaigns: Campaign[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
+function AnunciosAds({ items }: { items: AdsItemRaw[] }) {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
-    if (statusFilter === "all") return campaigns;
-    return campaigns.filter(c => c.status === statusFilter);
-  }, [campaigns, statusFilter]);
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(i => i.title.toLowerCase().includes(q) || i.ml_item_id.toLowerCase().includes(q));
+  }, [items, search]);
 
-  const counts = {
-    all:    campaigns.length,
-    active: campaigns.filter(c => c.status === "active").length,
-    paused: campaigns.filter(c => c.status === "paused").length,
-  };
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  if (items.length === 0) {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex items-start gap-3">
+        <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold text-sm text-blue-800">Nenhuma métrica de Ads coletada</p>
+          <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+            A tabela de métricas de Ads está vazia. Quando o coletor de Product Ads do Mercado Livre
+            for ativado, os dados por anúncio aparecerão nesta listagem.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
-      <div className="flex items-center gap-1 bg-white border border-border rounded-xl p-1 w-fit">
-        {([
-          { key: "all",    label: `Todas (${counts.all})` },
-          { key: "active", label: `Ativas (${counts.active})` },
-          { key: "paused", label: `Pausadas (${counts.paused})` },
-        ] as const).map(t => (
-          <button key={t.key} onClick={() => setStatusFilter(t.key)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === t.key
-              ? "bg-primary text-white shadow-sm"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
-            {t.label}
-          </button>
-        ))}
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          placeholder="Buscar por título ou MLB..."
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1); }}
+          className="w-full h-10 pl-10 pr-4 text-sm rounded-xl border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+        />
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-border overflow-hidden"
         style={{ boxShadow: "0 1px 4px rgb(0 0 0 / .05)" }}>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 900 }}>
+          <table className="w-full text-sm" style={{ minWidth: 800 }}>
             <thead>
               <tr style={{ background: "hsl(var(--muted))" }} className="border-b border-border">
-                <th className="px-4 py-3.5 w-12" />
-                <th className="px-2 py-3.5 w-8" />
-                <th className="px-3 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Campanha</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Diagnóstico</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Budget/dia</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">ROAS Obj.</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">ROAS Real</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">ACOS</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vendas Ads</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cliques</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Impressões</th>
+                <th className="px-5 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Anúncio</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Conta</th>
+                <th className="px-4 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Investido</th>
+                <th className="px-4 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Receita</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">ROAS</th>
+                <th className="px-4 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Cliques</th>
+                <th className="px-4 py-3.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Impressões</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">CTR</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Tipo</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={11} className="py-14 text-center text-sm text-muted-foreground">Nenhuma campanha encontrada</td></tr>
-              ) : filtered.map(c => (
-                <CampaignRow key={c.id} campaign={c}
-                  isExpanded={expandedId === c.id}
-                  onToggle={() => setExpandedId(expandedId === c.id ? null : c.id)} />
+            <tbody className="divide-y divide-border">
+              {paginated.map(item => (
+                <tr key={item.ml_item_id} className="hover:bg-muted/30 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <div className="font-semibold text-foreground truncate max-w-[240px]">{item.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{item.ml_item_id}</div>
+                  </td>
+                  <td className="px-4 py-3.5 text-xs text-muted-foreground">{item.account_slug}</td>
+                  <td className="px-4 py-3.5 text-right font-semibold">
+                    {item.spend_d30.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </td>
+                  <td className="px-4 py-3.5 text-right font-semibold text-teal-700">
+                    {item.revenue_d30.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg border ${roasBadge(item.roas)}`}>
+                      {item.roas.toFixed(1)}x
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-muted-foreground">{num(item.clicks_d30)}</td>
+                  <td className="px-4 py-3.5 text-right text-muted-foreground">{num(item.impressions_d30)}</td>
+                  <td className="px-4 py-3.5 text-center text-sm">{item.ctr.toFixed(1)}%</td>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${item.is_grant ? "bg-teal-50 text-teal-700 border border-teal-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                      {item.is_grant ? "Grant" : "Pago"}
+                    </span>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {filtered.length > 0 && (
-          <div className="px-6 py-3 border-t border-border bg-muted/20 flex items-center gap-6 text-xs text-muted-foreground">
-            <span>{filtered.length} campanha(s)</span>
-            <span>·</span>
-            <span>Investimento: <strong className="text-foreground">{brl(filtered.reduce((s, c) => s + c.cost, 0))}</strong></span>
-            <span>·</span>
-            <span>Vendas Ads: <strong className="text-foreground">{filtered.reduce((s, c) => s + c.salesProductAds, 0)}</strong></span>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground">
+            {filtered.length === 0 ? "0 itens" : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} de ${filtered.length} itens`}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`h-7 w-7 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
+                  page === p ? "bg-primary text-white" : "border border-border bg-white text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="h-7 w-7 flex items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -513,29 +383,35 @@ function Campanhas({ campaigns }: { campaigns: Campaign[] }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "campaigns";
+type Tab = "overview" | "items";
 
 export default function Ads() {
   const { selectedAccountId } = useGlobalContext();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [data, setData] = useState<AdsSummaryRaw>({
+    total_spend: 0, total_revenue: 0, avg_roas: 0, grant_items: 0, items: [],
+  });
+  const [loading, setLoading] = useState(true);
 
-  const campaigns = useMemo(() =>
-    selectedAccountId
-      ? CAMPAIGNS.filter(c => c.accountId === selectedAccountId)
-      : CAMPAIGNS,
-    [selectedAccountId],
-  );
+  useEffect(() => {
+    setLoading(true);
+    const params = selectedAccountId ? `?account=${selectedAccountId}` : "";
+    api.get<AdsSummaryRaw>(`/ads${params}`)
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [selectedAccountId]);
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: "overview",   label: "Visão Geral",  icon: <Eye className="h-3.5 w-3.5" /> },
-    { key: "campaigns",  label: "Campanhas",    icon: <BarChart2 className="h-3.5 w-3.5" /> },
+    { key: "overview", label: "Visão Geral", icon: <Eye className="h-3.5 w-3.5" /> },
+    { key: "items",    label: "Anúncios",    icon: <BarChart2 className="h-3.5 w-3.5" /> },
   ];
 
   return (
     <Layout>
       <PageHeader
         title="Ads & Performance"
-        subtitle="Publicidade patrocinada — visão consolidada por conta"
+        subtitle={`Publicidade patrocinada — ${data.items.length} anúncio(s) com Ads`}
         actions={[{ label: "Exportar", icon: <Download className="h-4 w-4" />, variant: "outline" }]}
       />
 
@@ -557,8 +433,16 @@ export default function Ads() {
         ))}
       </div>
 
-      {activeTab === "overview"  && <VisaoGeral campaigns={campaigns} />}
-      {activeTab === "campaigns" && <Campanhas  campaigns={campaigns} />}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+        </div>
+      ) : (
+        <>
+          {activeTab === "overview" && <VisaoGeral data={data} />}
+          {activeTab === "items"    && <AnunciosAds items={data.items} />}
+        </>
+      )}
     </Layout>
   );
 }

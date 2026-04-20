@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ITEMS } from "@/mock/data";
+import { api } from "@/lib/api";
 import { Search, ExternalLink, Wrench, Car, ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 type SortKey = "score_asc" | "score_desc" | "sales_desc" | "specs_desc";
@@ -27,6 +27,51 @@ const QUICK_FILTERS = [
 
 const PAGE_SIZE = 25;
 
+interface RawItem {
+  id: number;
+  ml_item_id: string;
+  title: string;
+  thumbnail: string;
+  account_slug: string;
+  price: number;
+  available_quantity: number;
+  health_status: string;
+  health_score: number;
+  abc_curve: string;
+  specs_score: number;
+  tags_negative: number;
+  has_compatibilities: boolean;
+  revenue_d120: number;
+  sku?: string;
+  sold_quantity_d30?: number;
+  has_ean?: boolean;
+}
+
+function transformItem(raw: RawItem) {
+  return {
+    id: raw.ml_item_id,
+    title: raw.title,
+    sku: raw.sku || raw.ml_item_id,
+    accountId: raw.account_slug,
+    accountName: "Conta " + raw.account_slug,
+    score: raw.health_score ?? 0,
+    specsPercent: raw.specs_score ?? 0,
+    price: raw.price,
+    stock: raw.available_quantity,
+    sales30d: raw.sold_quantity_d30 ?? 0,
+    revenue30d: raw.revenue_d120 ?? 0,
+    status: raw.health_status || "healthy",
+    curve: raw.abc_curve || "C",
+    compatStatus: raw.has_compatibilities ? "complete" : "pending",
+    hasEan: raw.has_ean !== false,
+    hasNegativeTag: (raw.tags_negative ?? 0) > 0,
+    thumbnail: raw.thumbnail || "",
+    conversionRate: 0,
+    avgRating: 0,
+    totalReviews: 0,
+  };
+}
+
 export default function SaudeAnuncios() {
   const [, setLocation] = useLocation();
   const { selectedAccountId } = useGlobalContext();
@@ -39,10 +84,20 @@ export default function SaudeAnuncios() {
   });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [items, setItems] = useState<ReturnType<typeof transformItem>[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const base = useMemo(() => {
-    return selectedAccountId ? ITEMS.filter(i => i.accountId === selectedAccountId) : ITEMS;
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ per_page: "2000" });
+    if (selectedAccountId) params.set("account", selectedAccountId);
+    api.get<{ items: RawItem[] }>(`/items?${params}`).then(data => {
+      setItems((data.items || []).map(transformItem));
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [selectedAccountId]);
+
+  const base = items;
 
   const filterCounts = useMemo(() => ({
     all: base.length,
@@ -187,7 +242,14 @@ export default function SaudeAnuncios() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {paginated.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={10} className="py-20 text-center">
+                    <p className="text-sm text-muted-foreground">Carregando...</p>
+                  </td>
+                </tr>
+              )}
+              {!loading && paginated.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -200,7 +262,7 @@ export default function SaudeAnuncios() {
                   </td>
                 </tr>
               )}
-              {paginated.map(item => (
+              {!loading && paginated.map(item => (
                 <tr
                   key={item.id}
                   className="hover:bg-muted/40 transition-colors cursor-pointer"

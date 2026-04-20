@@ -17,14 +17,32 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) return;
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        setError("Credenciais inválidas");
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      localStorage.setItem("ml_token", data.access_token);
       setIsLoggedIn(true);
       setLocation("/");
-    }, 500);
+    } catch {
+      setError("Erro de conexão");
+      setLoading(false);
+    }
   };
 
   return (
@@ -156,6 +174,10 @@ export default function Login() {
               />
             </div>
 
+
+            {error && (
+              <p className="text-sm text-red-600 font-medium text-center">{error}</p>
+            )}
             <button
               type="submit"
               disabled={loading}

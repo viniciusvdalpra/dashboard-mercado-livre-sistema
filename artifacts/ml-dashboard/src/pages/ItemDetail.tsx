@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ITEM_DETAIL, ITEMS } from "@/mock/data";
+import { api } from "@/lib/api";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -28,42 +28,120 @@ const SPEC_TYPE_LABELS: Record<string, string> = {
   common: "Comum",
 };
 
-const TAG_STYLES: Record<string, string> = {
-  positive: "bg-green-50 text-green-700 border border-green-200",
-  negative: "bg-red-50 text-red-700 border border-red-200",
-  neutral: "bg-muted text-muted-foreground border border-border",
-};
+interface ItemDetailData {
+  id: number;
+  ml_item_id: string;
+  title: string;
+  permalink: string;
+  thumbnail: string;
+  account_slug: string;
+  price: number;
+  available_quantity: number;
+  sold_quantity: number;
+  health_status: string;
+  health_score: number;
+  abc_curve: string;
+  specs_score: number;
+  specs_total: number;
+  specs_filled: number;
+  tags_positive: number;
+  tags_negative: number;
+  has_compatibilities: boolean;
+  compatibilities_count: number;
+  ean: string | null;
+  revenue_d120: number;
+  units_d120: number;
+}
+
+interface SpecItem {
+  attribute_id: string;
+  attribute_name: string;
+  value: string | null;
+  is_required: boolean;
+  is_hidden: boolean;
+  weight: number;
+}
+
+interface SalesEntry {
+  date: string;
+  quantity: number;
+  revenue: number;
+}
 
 export default function ItemDetail() {
   const params = useParams<{ itemId: string }>();
   const [, setLocation] = useLocation();
-
-  const item = ITEM_DETAIL;
-  const allItems = ITEMS;
-  const currentIndex = allItems.findIndex(i => i.id === params.itemId);
-  const prevItem = currentIndex > 0 ? allItems[currentIndex - 1] : null;
-  const nextItem = currentIndex < allItems.length - 1 ? allItems[currentIndex + 1] : null;
-
-  const [specs, setSpecs] = useState(
-    item.specs.map(s => ({ ...s, editValue: s.value }))
-  );
+  const [item, setItem] = useState<ItemDetailData | null>(null);
+  const [specs, setSpecs] = useState<(SpecItem & { editValue: string })[]>([]);
+  const [dailySales, setDailySales] = useState<SalesEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [savedSpecs, setSavedSpecs] = useState(false);
+
+  useEffect(() => {
+    if (!params.itemId) return;
+    setLoading(true);
+
+    // Find item by ml_item_id first
+    api.get<{ items: any[] }>(`/items?per_page=1&search=${params.itemId}`).then(async data => {
+      const found = data.items?.[0];
+      if (!found) { setLoading(false); return; }
+      const itemId = found.id;
+
+      const [detail, specsData, salesData] = await Promise.all([
+        api.get<ItemDetailData>(`/items/${itemId}`),
+        api.get<SpecItem[]>(`/items/${itemId}/specs`).catch(() => []),
+        api.get<SalesEntry[]>(`/items/${itemId}/daily-sales`).catch(() => []),
+      ]);
+
+      setItem(detail);
+      setSpecs((specsData as SpecItem[]).map(s => ({
+        ...s,
+        editValue: s.value || "",
+      })));
+      setDailySales(salesData as SalesEntry[]);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [params.itemId]);
 
   const handleSaveSpecs = () => {
     setSavedSpecs(true);
     setTimeout(() => setSavedSpecs(false), 2000);
   };
 
-  const sales = item.sales;
-  const salesPeriods = [
-    { period: "30d", qty: sales.d30, rev: sales.rev30 },
-    { period: "60d", qty: sales.d60, rev: sales.rev60 },
-    { period: "90d", qty: sales.d90, rev: sales.rev90 },
-    { period: "120d", qty: sales.d120, rev: sales.rev120 },
-  ];
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        </div>
+      </Layout>
+    );
+  }
 
-  const priceGap = item.priceCompetition.gap;
-  const gapColor = priceGap > 15 ? "text-red-600" : priceGap > 5 ? "text-amber-600" : "text-green-600";
+  if (!item) {
+    return (
+      <Layout>
+        <div className="text-center py-20">
+          <p className="text-sm text-muted-foreground">Item não encontrado</p>
+          <button onClick={() => setLocation("/saude")} className="text-primary text-sm mt-2">Voltar à lista</button>
+        </div>
+      </Layout>
+    );
+  }
+
+  const salesD30 = dailySales.slice(-30).reduce((s, d) => s + d.quantity, 0);
+  const salesD60 = dailySales.slice(-60).reduce((s, d) => s + d.quantity, 0);
+  const salesD90 = dailySales.slice(-90).reduce((s, d) => s + d.quantity, 0);
+  const revD30 = dailySales.slice(-30).reduce((s, d) => s + d.revenue, 0);
+  const revD60 = dailySales.slice(-60).reduce((s, d) => s + d.revenue, 0);
+  const revD90 = dailySales.slice(-90).reduce((s, d) => s + d.revenue, 0);
+
+  const salesPeriods = [
+    { period: "30d", qty: salesD30, rev: revD30 },
+    { period: "60d", qty: salesD60, rev: revD60 },
+    { period: "90d", qty: salesD90, rev: revD90 },
+    { period: "120d", qty: item.units_d120, rev: item.revenue_d120 },
+  ];
 
   return (
     <Layout>
@@ -78,33 +156,17 @@ export default function ItemDetail() {
         </button>
         <span className="text-border">|</span>
         <div className="flex items-center gap-2 ml-auto">
-          {prevItem && (
-            <button
-              onClick={() => setLocation(`/saude/${prevItem.id}`)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-1.5 transition-colors"
-              data-testid="btn-prev"
+          {item.permalink && (
+            <a
+              href={item.permalink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/5 transition-colors"
+              data-testid="link-ml"
             >
-              <ArrowLeft className="h-3 w-3" /> Anterior
-            </button>
+              Abrir no ML <ExternalLink className="h-3 w-3" />
+            </a>
           )}
-          {nextItem && (
-            <button
-              onClick={() => setLocation(`/saude/${nextItem.id}`)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-1.5 transition-colors"
-              data-testid="btn-next"
-            >
-              Próximo <ArrowRight className="h-3 w-3" />
-            </button>
-          )}
-          <a
-            href={item.permalink}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/5 transition-colors"
-            data-testid="link-ml"
-          >
-            Abrir no ML <ExternalLink className="h-3 w-3" />
-          </a>
         </div>
       </div>
 
@@ -116,17 +178,15 @@ export default function ItemDetail() {
             <div>
               <h1 className="font-bold text-lg text-foreground leading-tight mb-1">{item.title}</h1>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>{item.id}</span>
+                <span>{item.ml_item_id}</span>
                 <span>·</span>
-                <span>{item.sku}</span>
-                <span>·</span>
-                <span>{item.accountName}</span>
+                <span>{item.account_slug}</span>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <StatusBadge status={item.status} />
-              <span className={`text-sm font-bold ${item.curve === "A" ? "curve-a" : item.curve === "B" ? "curve-b" : "curve-c"}`}>
-                Curva {item.curve}
+              <StatusBadge status={item.health_status} />
+              <span className={`text-sm font-bold ${item.abc_curve === "A" ? "curve-a" : item.abc_curve === "B" ? "curve-b" : "curve-c"}`}>
+                Curva {item.abc_curve}
               </span>
             </div>
           </div>
@@ -134,22 +194,18 @@ export default function ItemDetail() {
             <span className="font-bold text-xl text-foreground">
               {item.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </span>
-            <span className="text-muted-foreground">{item.stock} em estoque</span>
+            <span className="text-muted-foreground">{item.available_quantity} em estoque</span>
+            {item.ean && <span className="text-muted-foreground">EAN: {item.ean}</span>}
           </div>
         </div>
       </div>
 
       {/* Score cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Score ML" value={`${item.score}/100`} icon={<Zap className="h-4 w-4" />} />
-        <KpiCard label="Ficha técnica" value={`${item.specsPercent}%`} icon={<FileText className="h-4 w-4" />} />
-        <KpiCard label="Conversão" value={`${(item.conversionRate * 100).toFixed(1)}%`} icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard
-          label="Avaliação"
-          value={`${item.avgRating.toFixed(1)} ★`}
-          subtext={`${item.totalReviews} avaliações`}
-          icon={<Star className="h-4 w-4" />}
-        />
+        <KpiCard label="Score ML" value={`${item.health_score}/100`} icon={<Zap className="h-4 w-4" />} />
+        <KpiCard label="Ficha técnica" value={`${item.specs_score}%`} icon={<FileText className="h-4 w-4" />} />
+        <KpiCard label="Vendas 120d" value={item.units_d120} icon={<TrendingUp className="h-4 w-4" />} />
+        <KpiCard label="Compatibilidades" value={item.compatibilities_count} icon={<Car className="h-4 w-4" />} />
       </div>
 
       {/* 2-column grid */}
@@ -159,7 +215,7 @@ export default function ItemDetail() {
         <Card>
           <CardHeader className="px-5 pt-5 pb-3 flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" /> Ficha Técnica
+              <FileText className="h-4 w-4 text-muted-foreground" /> Ficha Técnica ({item.specs_filled}/{item.specs_total})
             </CardTitle>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" data-testid="btn-claude">
@@ -178,29 +234,32 @@ export default function ItemDetail() {
           </CardHeader>
           <CardContent className="px-5 pb-5">
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {specs.map((spec, i) => (
-                <div key={spec.id} className="flex items-center gap-3">
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 w-20 text-center ${SPEC_TYPE_STYLES[spec.type]}`}>
-                    {SPEC_TYPE_LABELS[spec.type]}
-                  </span>
-                  <span className="text-xs text-muted-foreground w-32 flex-shrink-0 truncate">{spec.name}</span>
-                  {spec.filled ? (
-                    <span className="text-sm font-medium text-foreground">{spec.value}</span>
-                  ) : (
-                    <Input
-                      className="h-7 text-xs flex-1"
-                      placeholder="Preencher..."
-                      value={spec.editValue}
-                      onChange={e => {
-                        const newSpecs = [...specs];
-                        newSpecs[i] = { ...newSpecs[i], editValue: e.target.value };
-                        setSpecs(newSpecs);
-                      }}
-                      data-testid={`spec-input-${spec.id}`}
-                    />
-                  )}
-                </div>
-              ))}
+              {specs.map((spec, i) => {
+                const type = spec.is_required ? "required" : spec.is_hidden ? "hidden" : "common";
+                return (
+                  <div key={spec.attribute_id} className="flex items-center gap-3">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 w-20 text-center ${SPEC_TYPE_STYLES[type]}`}>
+                      {SPEC_TYPE_LABELS[type]}
+                    </span>
+                    <span className="text-xs text-muted-foreground w-32 flex-shrink-0 truncate">{spec.attribute_name}</span>
+                    {spec.value ? (
+                      <span className="text-sm font-medium text-foreground">{spec.value}</span>
+                    ) : (
+                      <Input
+                        className="h-7 text-xs flex-1"
+                        placeholder="Preencher..."
+                        value={spec.editValue}
+                        onChange={e => {
+                          const newSpecs = [...specs];
+                          newSpecs[i] = { ...newSpecs[i], editValue: e.target.value };
+                          setSpecs(newSpecs);
+                        }}
+                        data-testid={`spec-input-${spec.attribute_id}`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -211,27 +270,18 @@ export default function ItemDetail() {
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Car className="h-4 w-4 text-muted-foreground" /> Compatibilidades
             </CardTitle>
-            <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="btn-accept-compat">
-              Aceitar sugestões ML
-            </Button>
           </CardHeader>
           <CardContent className="px-5 pb-5">
             <div className="flex items-center gap-3 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <Car className="h-5 w-5 text-amber-600 flex-shrink-0" />
               <div>
-                <div className="text-sm font-medium text-amber-800">Compatibilidades pendentes</div>
+                <div className="text-sm font-medium text-amber-800">
+                  {item.has_compatibilities ? `${item.compatibilities_count} cadastradas` : "Nenhuma compatibilidade"}
+                </div>
                 <div className="text-xs text-amber-600">
-                  {item.compatTotal} cadastradas · {item.compatSuggestions} sugestões do ML disponíveis
+                  {!item.has_compatibilities && "Adicionar compatibilidades pode melhorar o score"}
                 </div>
               </div>
-            </div>
-            <div className="text-xs text-muted-foreground mb-2 font-medium">Sugestões de compatibilidade:</div>
-            <div className="flex flex-wrap gap-2">
-              {["VW Gol 2018-2024", "VW Voyage 2018-2022", "VW Saveiro 2020-2024", "Honda Civic 2017-2021", "Toyota Corolla 2015-2019", "Hyundai HB20 2019-2023"].map(v => (
-                <Badge key={v} variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 hover:border-primary transition-colors">
-                  + {v}
-                </Badge>
-              ))}
             </div>
           </CardContent>
         </Card>
@@ -253,45 +303,24 @@ export default function ItemDetail() {
                 </div>
               ))}
             </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={item.dailySales.slice(-60)} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#9CA3AF" }} stroke="transparent" interval={14} />
-                <YAxis tick={{ fontSize: 9, fill: "#9CA3AF" }} stroke="transparent" />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-                <Line type="monotone" dataKey="qty" stroke="#C6A339" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            {dailySales.length > 0 && (
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={dailySales.slice(-60)} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#9CA3AF" }} stroke="transparent" interval={14} />
+                  <YAxis tick={{ fontSize: 9, fill: "#9CA3AF" }} stroke="transparent" />
+                  <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
+                  <Line type="monotone" dataKey="quantity" stroke="#C6A339" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+            {dailySales.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">Sem dados de vendas diárias</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Card 4: Ações pendentes */}
-        <Card>
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Zap className="h-4 w-4 text-muted-foreground" /> Ações Pendentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5 space-y-2">
-            {item.pendingActions.map((action, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border border-border">
-                <div>
-                  <div className="text-sm font-medium text-foreground">{action.label}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Prioridade: {action.priority}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs font-bold text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded">
-                    +{action.scoreGain} pts
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Card 5: Tags */}
+        {/* Card 4: Tags */}
         <Card>
           <CardHeader className="px-5 pt-5 pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -299,54 +328,18 @@ export default function ItemDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-5">
-            <div className="flex flex-wrap gap-2">
-              {item.tags.map(tag => (
-                <span
-                  key={tag.tag}
-                  className={`inline-flex items-center text-xs px-3 py-1.5 rounded-full font-medium ${TAG_STYLES[tag.type]}`}
-                  data-testid={`tag-${tag.tag}`}
-                >
-                  {tag.label}
-                </span>
-              ))}
+            <div className="flex items-center gap-3">
+              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg flex-1">
+                <div className="font-bold text-lg text-green-700">{item.tags_positive}</div>
+                <div className="text-xs text-green-600">Positivas</div>
+              </div>
+              <div className="text-center p-3 bg-red-50 border border-red-200 rounded-lg flex-1">
+                <div className="font-bold text-lg text-red-700">{item.tags_negative}</div>
+                <div className="text-xs text-red-600">Negativas</div>
+              </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Card 6: Preço e competitividade */}
-        <Card>
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" /> Preço e Competitividade
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="p-3 bg-muted/40 rounded-lg border border-border">
-                <div className="text-xs text-muted-foreground mb-1">Seu preço</div>
-                <div className="text-xl font-bold text-foreground">
-                  {item.priceCompetition.current.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                </div>
-              </div>
-              <div className="p-3 bg-muted/40 rounded-lg border border-border">
-                <div className="text-xs text-muted-foreground mb-1">Sugerido pelo ML</div>
-                <div className="text-xl font-bold text-foreground">
-                  {item.priceCompetition.suggested.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="text-xs text-amber-700">
-                Seu preço está <span className={`font-bold ${gapColor}`}>{priceGap.toFixed(1)}% acima</span> do sugerido pelo ML.
-                {priceGap > 15 && " Risco de penalização de visibilidade."}
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              ⚠️ Sugestões do ML podem comparar produtos diferentes. Sempre valide antes de ajustar.
-            </p>
-          </CardContent>
-        </Card>
-
       </div>
     </Layout>
   );
