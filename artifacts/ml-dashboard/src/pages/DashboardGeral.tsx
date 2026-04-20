@@ -179,6 +179,12 @@ function SalesChart({ data }: { data: typeof DAILY_SALES | any[] }) {
   const { selectedAccountId } = useGlobalContext();
   const sliced = data.slice(-period);
 
+  // Detect if per-account breakdown is available (API may only return totals)
+  const hasPerAccountData = sliced.some(d =>
+    (d as any).qty_1 > 0 || (d as any).qty_2 > 0 ||
+    (d as any).qty_3 > 0 || (d as any).qty_4 > 0
+  );
+
   const xInterval = period === 7 ? 0 : period <= 30 ? 4 : 9;
   const yFmt = (v: number) => mode === "revenue" ? `R$${(v / 1000).toFixed(0)}k` : String(v);
   const tooltipFmt = (v: number, name: string) =>
@@ -196,8 +202,8 @@ function SalesChart({ data }: { data: typeof DAILY_SALES | any[] }) {
     boxShadow: "0 4px 16px rgb(0 0 0 / .1)",
   };
 
-  // Single account view
-  const singleLine = selectedAccountId
+  // Single account view — only if per-account data is available
+  const singleLine = (selectedAccountId && hasPerAccountData)
     ? ACCOUNT_LINES.find(a => a.id === selectedAccountId) ?? null
     : null;
 
@@ -241,7 +247,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES | any[] }) {
       {/* Legend — only when showing all accounts */}
       {!singleLine && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-4">
-          {ACCOUNT_LINES.map(a => (
+          {hasPerAccountData && ACCOUNT_LINES.map(a => (
             <span key={a.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="inline-block h-2 w-5 rounded-full" style={{ background: a.color }} />
               {a.shortName}
@@ -292,7 +298,7 @@ function SalesChart({ data }: { data: typeof DAILY_SALES | any[] }) {
             <XAxis dataKey="date" tick={axisStyle} stroke="transparent" interval={xInterval} />
             <YAxis tick={axisStyle} stroke="transparent" tickFormatter={yFmt} />
             <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} />
-            {ACCOUNT_LINES.map(a => (
+            {hasPerAccountData && ACCOUNT_LINES.map(a => (
               <Line
                 key={a.id}
                 type="monotone"
