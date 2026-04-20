@@ -79,16 +79,19 @@ export function transformSalesChart(apiData: any[]) {
     const qty = d.qty ?? d.orders ?? 0;
     const revenue = d.revenue ?? 0;
 
-    // Per-account breakdown — backend may send qty_1..4 directly or via account slugs
-    const qty_1 = d.qty_1 ?? d.orders_toyo ?? 0;
-    const qty_2 = d.qty_2 ?? d.orders_sac  ?? 0;
-    const qty_3 = d.qty_3 ?? d.orders_oficial ?? 0;
-    const qty_4 = d.qty_4 ?? d.orders_denzel  ?? 0;
+    // Per-account breakdown via orders_by_account / revenue_by_account (keyed by slug)
+    const oba = d.orders_by_account ?? {};
+    const rba = d.revenue_by_account ?? {};
 
-    const revenue_1 = d.revenue_1 ?? d.revenue_toyo   ?? 0;
-    const revenue_2 = d.revenue_2 ?? d.revenue_sac    ?? 0;
-    const revenue_3 = d.revenue_3 ?? d.revenue_oficial ?? 0;
-    const revenue_4 = d.revenue_4 ?? d.revenue_denzel  ?? 0;
+    const qty_1 = d.qty_1 ?? oba.toyo    ?? 0;
+    const qty_2 = d.qty_2 ?? oba.sac     ?? 0;
+    const qty_3 = d.qty_3 ?? oba.oficial  ?? 0;
+    const qty_4 = d.qty_4 ?? oba.denzel   ?? 0;
+
+    const revenue_1 = d.revenue_1 ?? rba.toyo    ?? 0;
+    const revenue_2 = d.revenue_2 ?? rba.sac     ?? 0;
+    const revenue_3 = d.revenue_3 ?? rba.oficial  ?? 0;
+    const revenue_4 = d.revenue_4 ?? rba.denzel   ?? 0;
 
     return {
       date: formatted,
