@@ -1,6 +1,9 @@
 modules = ["nodejs-24", "postgresql-16"]
 
 [[artifacts]]
+id = "artifacts/ml-dashboard"
+
+[[artifacts]]
 id = "artifacts/api-server"
 
 [[artifacts]]
